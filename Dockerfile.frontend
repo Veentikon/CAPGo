@@ -1,0 +1,20 @@
+# Use the official Flutter SDK image
+FROM cirrusci/flutter:stable
+
+# Set working directory inside container
+WORKDIR /app
+
+# Copy Flutter project files
+COPY . .
+
+# Install dependencies (using flutter pub get)
+RUN flutter pub get
+
+# Build the Flutter app (for web or desktop, can be adjusted to mobile)
+RUN flutter build web
+
+# Expose port for serving the Flutter web app
+EXPOSE 5000
+
+# Serve the Flutter web app using a simple HTTP server
+CMD ["flutter", "run", "-d", "web-server", "--web-port=5000"]

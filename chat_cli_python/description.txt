@@ -1,0 +1,9 @@
+The contents of the chat_cli_python comprise a CLI (Command Line Interface) application that is designed to 
+communicate with the Golang server
+
+
+
+
+#TODOs
+Correct name of a chatroom:
+must have a unique identifier

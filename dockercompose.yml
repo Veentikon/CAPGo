@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  # Go backend service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8080:8080" # Backend API port
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=something
+      - DB_PASSWORD=MyVerySecurePassword78
+      - DB_NAME=convos
+
+  # Flutter frontend service
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "5000:5000" # Frontend web port
+    depends_on:
+      - backend
+
+  # PostgreSQL database service
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: IamUser
+      POSTGRES_PASSWORD: MyVerySecurePassword78
+      POSTGRES_DB: mydb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:
