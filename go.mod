@@ -1,3 +1,3 @@
-module my_chatroom
+module chatroom
 
-go 1.23.6
+go 1.19

@@ -1,20 +1,30 @@
-# Use the official Flutter SDK image
-FROM cirrusci/flutter:stable
+# Use the official Python SDK
+FROM python
 
-# Set working directory inside container
 WORKDIR /app
 
-# Copy Flutter project files
-COPY . .
+# COPY ./chat_cli_python/ .
 
-# Install dependencies (using flutter pub get)
-RUN flutter pub get
+EXPOSE 8000
 
-# Build the Flutter app (for web or desktop, can be adjusted to mobile)
-RUN flutter build web
+# FROM cirrusci/flutter:stable
 
-# Expose port for serving the Flutter web app
-EXPOSE 5000
+# # Set working directory inside container
+# WORKDIR /app
 
-# Serve the Flutter web app using a simple HTTP server
-CMD ["flutter", "run", "-d", "web-server", "--web-port=5000"]
+# # Copy Flutter project files
+# COPY . .
+
+# # Install dependencies (using flutter pub get)
+# RUN flutter pub get
+
+# # Build the Flutter app (for web or desktop, can be adjusted to mobile)
+# RUN flutter build web
+
+# # Expose port
+# EXPOSE 8000
+
+# # Serve the Flutter web app using a simple HTTP server
+# CMD ["flutter", "run", "-d", "web-server", "--web-port=8000"]
+# CMD ["/bin/sh"]
+CMD ["tail", "-f", "/dev/null"]
