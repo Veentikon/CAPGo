@@ -6,7 +6,6 @@ import (
 
 	"log"
 	"net"
-	"strconv"
 	"strings"
 )
 
@@ -23,7 +22,7 @@ func handleConnection(conn net.Conn, rooms map[string][]string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("Received username: ", username)
+	fmt.Println("Received username:", username)
 
 	reader := bufio.NewReader(conn)
 	for {
@@ -37,7 +36,7 @@ func handleConnection(conn net.Conn, rooms map[string][]string) {
 		msgSplit := strings.SplitN(msg, " ", 2) // Split input into two, command and argument
 
 		if msgSplit[0] == "create" {
-			fmt.Println("Creating room: ", msgSplit[1])
+			fmt.Println("Creating room:", msgSplit[1])
 			if rooms[msgSplit[1]] == nil {
 				rooms[msgSplit[1]] = []string{}
 				conn.Write([]byte("Romm created\n"))
@@ -46,13 +45,15 @@ func handleConnection(conn net.Conn, rooms map[string][]string) {
 			}
 		} else if msgSplit[0] == "send" {
 			fmt.Println("Sending message")
+
 			if current_room != "" {
-				rooms[current_room] = append(rooms[current_room], username+": "+msgSplit[1])
+				message := fmt.Sprintf("%s: %s", strings.TrimSpace(username), msgSplit[1])
+				rooms[current_room] = append(rooms[current_room], message)
 			}
 			// No need to resend it back since the user will have it printed on the screen anyways
 			conn.Write([]byte("\n")) // placeholder needed for proper functioning for now
 		} else if msgSplit[0] == "connect" {
-			fmt.Println("Connecting to the room: ", msgSplit[1])
+			fmt.Println("Connecting to the room:", msgSplit[1])
 			if rooms[msgSplit[1]] != nil {
 				current_room = msgSplit[1]
 			}
@@ -64,14 +65,18 @@ func handleConnection(conn net.Conn, rooms map[string][]string) {
 		} else if msgSplit[0] == "rooms" {
 			keys := ""
 			for k := range rooms {
-				keys += k + ", "
+				keys += k + ", " // Unfortunately this adds extra comma at the end
 			}
 			conn.Write([]byte(keys + "\n"))
 		} else if msgSplit[0] == "check" {
 			fmt.Println("Sending messages ...")
-			conn.Write([]byte(strconv.Itoa(len(rooms[current_room])) + "\n")) // send first the number of messages the client should expect
+			// conn.Write([]byte(strconv.Itoa(len(rooms[current_room])) + "\n")) // send first the number of messages the client should expect
+			for _, msg := range rooms[current_room] {
+				conn.Write([]byte(msg))
+			}
 			// Then send all the messages in the list
 		} else if msgSplit[0] == "exit" {
+			fmt.Println("Quitting ...")
 			// Stop the execution and return
 			return
 		} else {
@@ -116,3 +121,9 @@ func main() {
 
 // The endgoal could be to have "conversations" recorded in a database instead.
 // add function to leave a chat
+
+// Next step is to implement messenging and chatrooms with dictionary and lists
+// Next is to implement a proper database
+// Next is to implmement secure/encrypted messaging
+// Next is to implement a GUI
+// Finally host the application online, either GCP, AWS, Azuer, etc.
