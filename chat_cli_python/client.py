@@ -184,3 +184,7 @@ if __name__=="__main__":
 
     user_listener.start()
     server_listener.start()
+
+
+# Create Second container and test concurrent messaging
+# Latest problem to fix: messages are glued together when receiving and printing them from the server

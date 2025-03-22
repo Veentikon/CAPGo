@@ -6,11 +6,65 @@ import (
 
 	"log"
 	"net"
+	"sync"
+
 	"strings"
 )
 
+type Message struct {
+	sender net.Conn // Connection the message originates from
+	text   string   // The message
+}
+
+type Room struct {
+	members   map[net.Conn]bool // Dict of subscribers to the room
+	broadcast chan Message      // A buffer of messages
+	mu        sync.Mutex
+}
+
+func NewRoom() *Room {
+	room := &Room{
+		members:   make(map[net.Conn]bool),
+		broadcast: make(chan Message),
+	}
+	go room.startBroadcast() // Start listening for messages
+	return room
+}
+
+func (r *Room) startBroadcast() {
+	for msg := range r.broadcast { // Blocking call, waits for messages
+		r.mu.Lock()
+		for conn := range r.members {
+			if conn != msg.sender { // Don't send to the sender
+				// fmt.Fprintf(conn, "%s\n", msg.text)
+				fmt.Println(msg.text)
+				// fmt.Println(conn)
+				conn.Write([]byte(msg.text + "\n"))
+			}
+		}
+		r.mu.Unlock()
+	}
+}
+
+func (r *Room) Join(conn net.Conn) {
+	r.mu.Lock()
+	r.members[conn] = true
+	r.mu.Unlock()
+}
+
+func (r *Room) Leave(conn net.Conn) {
+	r.mu.Lock()
+	delete(r.members, conn)
+	r.mu.Unlock()
+	//r.mu.Close()
+}
+
+func (r *Room) SendMessage(sender net.Conn, text string) {
+	r.broadcast <- Message{sender: sender, text: text} // Send message to broadcast channel
+}
+
 // Connection handler
-func handleConnection(conn net.Conn, rooms map[string][]string) {
+func handleConnection(conn net.Conn, rooms map[string][]string, chats map[string]*Room) {
 	fmt.Println("Connection recieved")
 	// var current_room string = ""
 	current_room := ""
@@ -38,8 +92,14 @@ func handleConnection(conn net.Conn, rooms map[string][]string) {
 		if msgSplit[0] == "create" {
 			fmt.Println("Creating room:", msgSplit[1])
 			if rooms[msgSplit[1]] == nil {
-				rooms[msgSplit[1]] = []string{}
+
+				////////
+				rooms[msgSplit[1]] = []string{} //TODO: manage broadcast routine so that it does not run when there is 1 or 0 subscrubers ==============
+				chats[msgSplit[1]] = NewRoom()
+				////////
+
 				conn.Write([]byte("Romm created\n"))
+
 			} else {
 				conn.Write([]byte("Room already exists\n"))
 			}
@@ -48,29 +108,38 @@ func handleConnection(conn net.Conn, rooms map[string][]string) {
 
 			if current_room != "" {
 				message := fmt.Sprintf("%s: %s", strings.TrimSpace(username), msgSplit[1])
-				rooms[current_room] = append(rooms[current_room], message)
+
+				// the_chat := chats[current_room]
+				// the_chat.mu.Lock()
+				chats[current_room].SendMessage(conn, message)
+				// the_chat.mu.Unlock()
 			}
-			// No need to resend it back since the user will have it printed on the screen anyways
-			conn.Write([]byte("\n")) // placeholder needed for proper functioning for now
-		} else if msgSplit[0] == "connect" {
+		} else if msgSplit[0] == "connect" { // Subscribe the goroutine to the chatroom
 			fmt.Println("Connecting to the room:", msgSplit[1])
 			if rooms[msgSplit[1]] != nil {
 				current_room = msgSplit[1]
+				chats[current_room].Join(conn) // Join the room with our connection ################################################
 			}
 			conn.Write([]byte("Connected successfully\n"))
+
 		} else if msgSplit[0] == "leave" {
 			fmt.Println("Leaving the room ...")
+
+			chats[current_room].Leave(conn) // Leave the room ######################################################################
+
 			current_room = ""
 			conn.Write([]byte("Left the room\n"))
+
 		} else if msgSplit[0] == "rooms" {
 			keys := ""
 			for k := range rooms {
 				keys += k + ", " // Unfortunately this adds extra comma at the end
 			}
-			conn.Write([]byte(keys + "\n"))
+			if keys != "" { // Don't need to send empty string since it will just create an empty line
+				conn.Write([]byte(keys + "\n"))
+			}
 		} else if msgSplit[0] == "check" {
 			fmt.Println("Sending messages ...")
-			// conn.Write([]byte(strconv.Itoa(len(rooms[current_room])) + "\n")) // send first the number of messages the client should expect
 			for _, msg := range rooms[current_room] {
 				conn.Write([]byte(msg))
 			}
@@ -83,18 +152,13 @@ func handleConnection(conn net.Conn, rooms map[string][]string) {
 			fmt.Println("I don't know what to do here ...")
 			conn.Write([]byte("Unexpected format\n"))
 		}
-
-		// fmt.Printf("Received: %s", msg1) // Process input
-		// fmt.Println("Argument: ", msg1)
-		// fmt.Println(msg1)
-
-		// conn.Write([]byte("Message received\n")) // Respond to client
 	}
 }
 
 func main() {
 	// Dictionary where key is the name of the room and value is a list of strings/messages
 	chat_rooms := make(map[string][]string)
+	sub_rooms := make(map[string]*Room) // Store references to Rooms
 
 	listener, err := net.Listen("tcp", ":8080")
 	if err != nil {
@@ -110,7 +174,7 @@ func main() {
 			fmt.Println("Error accepting connection:", err)
 			continue
 		}
-		go handleConnection(conn, chat_rooms) // Handle each client in a goroutine
+		go handleConnection(conn, chat_rooms, sub_rooms) // Handle each client in a goroutine
 	}
 }
 
