@@ -1,0 +1,7 @@
+FROM postgres:17.4
+
+# Copy initialization scripts
+COPY init.sql /docker-entrypoint-initdb.d/
+
+# Expose the port for connections
+EXPOSE 5432
