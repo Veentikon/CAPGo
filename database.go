@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"os"
+	"strconv"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
@@ -13,56 +16,58 @@ import (
 
 var db *pgx.Conn // Global DB connection
 
-func ConnectDB() (*pgx.Conn, error) {
+// func ConnectDB() (*pgx.Conn, error) {
+func ConnectDB() error {
 	err := godotenv.Load()
 	if err != nil {
 		fmt.Println("Warning: No .env file found")
 	}
 
-	// dbURL := fmt.Sprintf(
-	// 	"postgres://%s:%s@%s:%s/%s",
-	// 	os.Getenv("POSTGRES_USER"),
-	// 	os.Getenv("POSTGRES_PASSWORD"),
-	// 	os.Getenv("POSTGRES_HOST"),
-	// 	os.Getenv("POSTGRES_PORT"),
-	// 	os.Getenv("POSTGRES_DB"),
-	// )
-
-	dbURL := "postgres://goop:Hi02kzP1N342@ad9*lj8LkdnY7348Kdfa@chatapp_db:5432/chat" // Fix, remove the literal from the file
+	dbURL := fmt.Sprintf(
+		"postgres://%s:%s@%s:%s/%s",
+		os.Getenv("POSTGRES_USER"),
+		os.Getenv("POSTGRES_PASSWORD"),
+		os.Getenv("POSTGRES_HOST"),
+		os.Getenv("POSTGRES_PORT"),
+		os.Getenv("POSTGRES_DB"),
+	)
 
 	// Connect to database
 	conn, err := pgx.Connect(context.Background(), dbURL)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	db = conn
-	return conn, nil
+	return nil
 }
 
 // Database API functions
-func GetUser(username string, password string) error {
+func GetUserDB(username string, password string) (string, error) {
 	var storedHash string
+	var user_id_int int
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	query := "SELECT password_hash FROM users WHERE username=$1"
-	err := db.QueryRow(ctx, query, username).Scan(&storedHash)
+	query := "SELECT password_hash, user_id FROM users WHERE username=$1"
+	err := db.QueryRow(ctx, query, username).Scan(&storedHash, &user_id_int)
+	user_id_str := strconv.Itoa(user_id_int)
+
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return errors.New("user not found")
+			return "", fmt.Errorf("error, user not found %v", errors.New("user not found"))
 		}
-		return err
+		return "", err
 	}
 
 	// Compare stored hash password with return password
 	err = bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(password))
 	if err != nil {
-		return errors.New("incorrect password")
+		return "", fmt.Errorf("error: %v", errors.New("incorrect password"))
 	}
 
-	fmt.Println("User authenticated successfully")
-	return nil
+	// fmt.Println("User authenticated successfully")
+	return user_id_str, nil
 }
 
 // func GetUsers() error {
@@ -72,8 +77,7 @@ func GetUser(username string, password string) error {
 // 	query := "SELECT user FROM users WHERE 1"
 // }
 
-// How do I search for users with a given name, what do I return? users with similar name or only the exact name?
-func UserExists(username string) error { // ============================================= Incomplete method
+func UserExistsDB(username string) (bool, error) { // ============================================= Incomplete method
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -83,13 +87,16 @@ func UserExists(username string) error { // ====================================
 	err := db.QueryRow(ctx, query, username).Scan(&foundUsername)
 
 	if err != nil {
-		return nil
+		if err == pgx.ErrNoRows { // Specifically if this error happens we do not return the error
+			return false, nil
+		}
+		return false, err // If the error happens due to other reason than No Rows error, return the error
 	}
 	// If such a user exists, return nil
-	return errors.New("user with such username already exists")
+	return true, errors.New("user with such username already exists")
 }
 
-func NewUser(username string, password string, email string) error {
+func NewUserDB(username string, password string, email string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // Set up query timeout
 	defer cancel()
 
@@ -104,40 +111,52 @@ func NewUser(username string, password string, email string) error {
 	if err != nil {
 		return errors.New("incorrect query")
 	}
-	fmt.Println("Account created successfully")
+	// fmt.Println("Account created successfully")
 	return nil
 }
 
-// Create a chatroom, for not it does not have a limit on the number of participants
-func NewChatRoom(creator_id string) error {
+// Create a chatroom, for now it does not have a limit on the number of participants
+func NewChatRoomDB(creator_id string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // Set up query timeout
 	defer cancel()
 
 	query := "INSERT INTO chatrooms (creator_id) VALUES ($1)"
-	_, err := db.Exec(ctx, query, creator_id)
+	var chatroom_id_int int                     // Place to store room id
+	creatorIDint, _ := strconv.Atoi(creator_id) // ========================= Not handling conversion error! =======================
+
+	err := db.QueryRow(ctx, query, creatorIDint).Scan(&chatroom_id_int)
 	if err != nil {
-		return errors.New("could not create new chatroom")
+		return "", fmt.Errorf("error creating chatroom: %v", err)
 	}
-	fmt.Println("New chatroom created successfully")
-	return nil
+
+	// _, err := db.Exec(ctx, query, creator_id)
+	// if err != nil {
+	// 	return errors.New("could not create new chatroom")
+	// }
+
+	// fmt.Println("New chatroom created successfully")
+	return strconv.Itoa(chatroom_id_int), nil
 }
 
 // Adds a message to the message table
-func NewMessage(room_id string, sender_id string, message string) error {
+func NewMessageDB(room_id string, sender_id string, message string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // Set up query timeout
 	defer cancel()
 
+	room_id_int, _ := strconv.Atoi(room_id)
+	sender_id_int, _ := strconv.Atoi(sender_id)
+
 	query := "INSERT INTO messages (room_id, sender_id, content) VALUES ($1, $2, $3)"
-	_, err := db.Exec(ctx, query, room_id, sender_id, message)
+	_, err := db.Exec(ctx, query, room_id_int, sender_id_int, message)
 	if err != nil {
 		return errors.New("incorrect query")
 	}
-	fmt.Println("Message saved")
+	// fmt.Println("Message saved")
 	return nil
 }
 
 // Returns messages in a given chatroom
-func GetMessages(room_id string) error {
+func GetMessagesDB(room_id string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // Set up query timeout
 	defer cancel()
 
@@ -159,8 +178,49 @@ func GetMessages(room_id string) error {
 		// fmt.Printf("Message from %d: %s [%s]\n", sender_id, content, timestamp)
 	}
 
-	fmt.Println("Messages retrieved successfully") // Don't want to print each individual message, but need to know it worked.
+	// fmt.Println("Messages retrieved successfully") // Don't want to print each individual message, but need to know it worked.
 	return nil
+}
+
+func JoinRoomDB(room_id string, user_id string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	query := "INSERT INTO chatroom_participants (room_id, user_id) VALUES ($1, $2)"
+
+	// Convert string to int
+	room_id_int, err := strconv.Atoi(room_id)
+	if err != nil {
+		return fmt.Errorf("invalid room ID: %w", err)
+	}
+	user_id_int, err := strconv.Atoi(user_id)
+	if err != nil {
+		return fmt.Errorf("invalid user ID: %w", err)
+	}
+	_, err = db.Exec(ctx, query, room_id_int, user_id_int)
+	if err == nil {
+		fmt.Println("Participant added to the chatroom")
+	}
+	return err
+}
+
+func LeaveRoomDB(room_id_str string, user_id_str string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	room_id_int, err := strconv.Atoi(room_id_str)
+	if err != nil {
+		return err // Handle conversion error
+	}
+	user_id_int, err := strconv.Atoi(user_id_str)
+	if err != nil {
+		return err // Handle conversion error
+	}
+
+	query := "DELETE FROM chatroom_participants WHERE room_id = $1 AND user_id = $2" // Corrected WHERE clause
+	_, err = db.Exec(ctx, query, room_id_int, user_id_int)
+
+	return err
 }
 
 // Close the connection to the database
