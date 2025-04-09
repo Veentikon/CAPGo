@@ -49,7 +49,7 @@ func GetUserDB(username string, password string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	query := "SELECT password_hash, user_id FROM users WHERE username=$1"
+	query := "SELECT password_hash, id FROM users WHERE username=$1"
 	err := db.QueryRow(ctx, query, username).Scan(&storedHash, &user_id_int)
 	user_id_str := strconv.Itoa(user_id_int)
 
@@ -111,7 +111,6 @@ func NewUserDB(username string, password string, email string) error {
 	if err != nil {
 		return errors.New("incorrect query")
 	}
-	// fmt.Println("Account created successfully")
 	return nil
 }
 
@@ -134,7 +133,6 @@ func NewChatRoomDB(creator_id string) (string, error) {
 	// 	return errors.New("could not create new chatroom")
 	// }
 
-	// fmt.Println("New chatroom created successfully")
 	return strconv.Itoa(chatroom_id_int), nil
 }
 
@@ -151,7 +149,6 @@ func NewMessageDB(room_id string, sender_id string, message string) error {
 	if err != nil {
 		return errors.New("incorrect query")
 	}
-	// fmt.Println("Message saved")
 	return nil
 }
 
@@ -175,10 +172,8 @@ func GetMessagesDB(room_id string) error {
 		if err := rows.Scan(&sender_id, &content, &timestamp); err != nil {
 			return err
 		}
-		// fmt.Printf("Message from %d: %s [%s]\n", sender_id, content, timestamp)
 	}
 
-	// fmt.Println("Messages retrieved successfully") // Don't want to print each individual message, but need to know it worked.
 	return nil
 }
 

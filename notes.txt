@@ -10,6 +10,8 @@ Queue struct - Short memory, unrecoverable messages
 golang server - accept and handle client connections via TCP
 Flutter - cross-platform Backend
 
+Valid key types are those that have equality operators '==' and '!=' fully defined.
+
 TLS over TCP - communication encryption
 bcrypt - hashed password storage with salt
 Json - client-server format message/request exchang

@@ -13,28 +13,28 @@ services:
     env_file:
       - .env
 
-  # Flutter frontend service
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    volumes:
-      - ./:/app
-    ports:
-      - "8000:8000" # Frontend web port
-    depends_on:
-      - backend
+  # # Flutter frontend service
+  # frontend:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.frontend
+  #   volumes:
+  #     - ./:/app
+  #   ports:
+  #     - "8000:8000" # Frontend web port
+  #   depends_on:
+  #     - backend
   
-  frontend1:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    volumes:
-      - ./:/app
-    ports:
-      - "8090:8090" # Frontend web port
-    depends_on:
-      - backend
+  # frontend1:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.frontend
+  #   volumes:
+  #     - ./:/app
+  #   ports:
+  #     - "8090:8090" # Frontend web port
+  #   depends_on:
+  #     - backend
 
   # PostgreSQL database service
   postgres:
