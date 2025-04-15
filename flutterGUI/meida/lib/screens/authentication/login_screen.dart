@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:meida/backend/server_conn_controller.dart';
+// import 'package:meida/backend/server_conn_controller.dart';
 import 'package:provider/provider.dart';
-import '../app_data.dart';
+import '../../app_data.dart';
 import 'package:go_router/go_router.dart';
+
 
 
 class LoginPage extends StatefulWidget { // If state is not logged in, this is the first page the user sees
@@ -70,25 +71,33 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
             SizedBox(height: verticalSpacing),
-            ElevatedButton(
-              onPressed: () async { // Wait for server response
-                // Test connection to server, if no connection try to connect.
-                if (!appState.isConnected) {
-                  logger.i("No server connection, attempting to connect");
-                  // await appState.connectToServer();
-                }
-                bool result = await appState.logIn(usrnmController.text, pswrdController.text);
-                if (!mounted) { return; }
-                if (result) {
-                  context.go('/generator');
-                } else if (!result) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Login failed, try again.")),
-                  );
-                }
-                // Redirected to appropriate page automatically based on logIn status
-              }, 
-              child: Text("Log in"),
+            Consumer<MyAppState>(
+              builder: (_, appState, __) => ElevatedButton(
+                onPressed: appState.isLoading ? null : () async {
+                  String result = await appState.logIn(usrnmController.text, pswrdController.text);
+                  // Upon success redirection happens automatically due to Consumer and notification
+                  if (result != "" && context.mounted) { // In case of failed login we want to show an error message.
+                    // appState.setNotLoading();
+                    usrnmController.clear();
+                    pswrdController.clear();
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result))); // Propagate the error message to the user
+                  }
+                },
+                child: appState.isLoading 
+                  ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2.5,),
+                      ),
+                      SizedBox(width: 8),
+                      Text("Logging in ..."),
+                    ],
+                  )
+                  : Text("Login"),
+              )
             ),
             SizedBox(height: verticalSpacing),
             TextButton(

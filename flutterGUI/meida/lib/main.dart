@@ -4,14 +4,14 @@ import 'package:provider/provider.dart';
 import 'app_data.dart';
 import 'package:go_router/go_router.dart';
 import 'screens/generator_screen.dart';
-import 'screens/login_screen.dart';
-import 'screens/sign_up_screen.dart';
-import 'screens/guest_login.dart';
-import 'screens/password_recovery_screen.dart';
-import 'screens/auth_screen.dart';
+import 'screens/authentication/login_screen.dart';
+import 'screens/authentication/sign_up_screen.dart';
+import 'screens/authentication/guest_login.dart';
+import 'screens/authentication/password_recovery_screen.dart';
+import 'screens/authentication/auth_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/messages_screen.dart';
-import 'screens/password_reset.dart';
+import 'screens/authentication/password_reset.dart';
 
 // Programm entry point
 void main() {
@@ -45,14 +45,14 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState(){
     super.initState();
-    _initSeverConnection();
+    // _initSeverConnection(); // Delay connecting to the server until the user tries to use a funcion of authorization page (login, etc.)
   }
 
-  // Function to initialize server connection
-  Future<void> _initSeverConnection() async {
-    final appState = Provider.of<MyAppState>(context, listen: false); // Access appState after context is available
-    await appState.connectToServer();
-  }
+  // // Function to initialize server connection
+  // Future<void> _initSeverConnection() async {
+  //   final appState = Provider.of<MyAppState>(context, listen: false); // Access appState after context is available
+  //   await appState.connectToServer();
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -103,6 +103,11 @@ class _MyAppState extends State<MyApp> {
                 GoRoute(
                   path: '/generator',
                   name: 'generator',
+                  builder: (context, state) => GeneratorPage(),
+                ),
+                GoRoute( // This is temporary solution, ===========================================
+                  path: '/',
+                  name: '/',
                   builder: (context, state) => GeneratorPage(),
                 ),
                 GoRoute(

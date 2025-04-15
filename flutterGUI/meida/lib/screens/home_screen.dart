@@ -39,8 +39,9 @@ class _MyHomePageState extends State<HomePage> {
                       label: Text('Home'),
                     ),
                     NavigationRailDestination(
-                      icon: Icon(Icons.message),
-                      label: Text('Messages'),
+                      // icon: Icon(Icons.message),
+                      icon: Icon(Icons.send),
+                      label: Text('Messaging'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.logout),

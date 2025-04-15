@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:meida/backend/server_conn_controller.dart';
 import 'package:provider/provider.dart';
-import '../app_data.dart';
+import '../../app_data.dart';
 
 
 class SignUpPage extends StatefulWidget {
@@ -105,13 +105,13 @@ class _SignUpState extends State<SignUpPage> {
               emailController.clear();
               logger.w("Passwords do not match or invalid email");
             } else {
-              bool result = await appState.signUp(usrnmController.text, pswrdController.text, emailController.text); // Don't wait for server confirmation?
+              String result = await appState.signUp(usrnmController.text, pswrdController.text, emailController.text); // Don't wait for server confirmation?
               if (!mounted) { return; }
-              if (result) {
+              if (result == "" && context.mounted) {
                 context.go('/login');
-              } else if (!result) {
+              } else if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Sign-up failed. Please try again."))
+                  SnackBar(content: Text(result))
                 );
               }
             }

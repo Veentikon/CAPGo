@@ -1,13 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
-
-	"context"
 
 	"github.com/gorilla/websocket"
 	// "sync"
@@ -44,6 +43,8 @@ func (server *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 	// Run client connection handler in a goroutine
 	go server.handleConnection(ctx, cancel, conn, server.rooms)
+	// If we are here it means the connection has been closed
+	// delete(server.conns, conn) // Need mutex! ==========================================================
 }
 
 const (
@@ -65,172 +66,171 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 
 	var username = ""
 	var request ClientRequest
+	var loggedIn = true
 
-	for { // Infinite loop, listen for incoming user requests
-		fmt.Println("Loop start") // =========================================================================================
-		// Read a request from client in Json format making sure to stop the execution if the client has disconnected
-		err := ws.ReadJSON(&request)           // Pass reference not the value
-		fmt.Println("Received client request") // ============================================================================
-		if err != nil {
-			if websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) || err == io.EOF {
-				fmt.Println("Client disconnected: ", ws.RemoteAddr())
-				break
-			}
-			fmt.Println("read error: ", err)
-			continue
-		}
-		fmt.Println("No error with receiving the request") // ================================================================
+	for loggedIn { // Infinite loop, listen for incoming user requests
+		select {
+		case <-ctx.Done(): // First check whether the connection has been closed.
+			fmt.Println("Context cancel, stopping handler")
+			return
+		default:
 
-		// Process the request
-		switch request.Action {
-		case ActionLogin:
-			var loginReq LoginRequest
-			err := json.Unmarshal(request.Data, &loginReq) // Unpack data portion of the request into separate json
+			// Read a request from client in Json format making sure to stop the execution if the client has disconnected
+			err := ws.ReadJSON(&request)
 			if err != nil {
-				fmt.Println(fmt.Errorf("json unmarshal error: %v", err))
-				jResp := ServerResponse{"response", "fail", request.RequestId, "error, invalid request", nil}
+				if websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) || err == io.EOF {
+					fmt.Println("Client disconnected: ", ws.RemoteAddr())
+					cancel()
+					break // Seems like break does not do what it was intended to do, break the main read loop
+				}
+				fmt.Println("read error: ", err)
+				continue
+			}
+
+			// Process the request
+			switch request.Action {
+			case ActionLogin:
+				var loginReq LoginRequest
+				err := json.Unmarshal(request.Data, &loginReq) // Unpack data portion of the request into separate json
+				if err != nil {
+					fmt.Println(fmt.Errorf("json unmarshal error: %v", err))
+					jResp := ServerResponse{"response", "fail", request.RequestId, "error, invalid request", nil}
+					if err := ws.WriteJSON(jResp); err != nil {
+						fmt.Println("Failed to send response: ", err.Error())
+					}
+					continue
+				}
+
+				user_id, err := GetUserDB(loginReq.Username, loginReq.Password) //
+				if err != nil {
+					fmt.Println(fmt.Errorf("login error: %v", err)) // ==============================
+					jResp := ServerResponse{"response", "fail", request.RequestId, "error, invalid request", nil}
+					if err := ws.WriteJSON(jResp); err != nil {
+						fmt.Println("Failed to send response: ", err.Error())
+					}
+					continue
+				}
+				jResp := ServerResponse{"response", "success", request.RequestId, user_id, nil}
 				if err := ws.WriteJSON(jResp); err != nil {
 					fmt.Println("Failed to send response: ", err.Error())
 				}
-				continue
-			}
 
-			user_id, err := GetUserDB(loginReq.Username, loginReq.Password) //
-			if err != nil {
-				fmt.Println(fmt.Errorf("login error: %v", err))
-				jResp := ServerResponse{"response", "fail", request.RequestId, "error, invalid request", nil}
-				if err := ws.WriteJSON(jResp); err != nil {
-					fmt.Println("Failed to send response: ", err.Error())
+				// Save username and connection
+				s.conns[loginReq.Username] = ws
+				username = loginReq.Username // Save username for reference
+				fmt.Println(username, "logged in.")
+			case ActionLogout:
+				var logOutRequest LogoutRequest
+				loggedIn = false
+				json.Unmarshal(request.Data, &logOutRequest)
+				// Perform logout
+				// Send response and the connection, and stop this routine
+				resp := ServerResponse{"response", "success", request.RequestId, "", json.RawMessage{}}
+				ws.WriteJSON(resp)
+				time.Sleep(50 * time.Millisecond) // Wait a little to make sure the message reaches the client
+				fmt.Println("Closing the connection")
+				// ws.Close() // not needed since we have defer ws.Close() call
+				cancel() // Stop the goroutine
+
+			case ActionSignUp:
+				var signReq SignUpRequest
+				json.Unmarshal(request.Data, &signReq)
+				exists, err := UserExistsDB(signReq.Username)
+				if exists {
+					fmt.Println(fmt.Errorf("sign-up error: %v", err))
+					resp := ServerResponse{"response", "fail", request.RequestId, fmt.Sprintf(`{"error": "%s"}`, err.Error()), nil}
+					if err := ws.WriteJSON(resp); err != nil {
+						fmt.Println("Failed to send response: ", err.Error())
+					}
+					continue
 				}
-				continue
-			}
-
-			dataContent := map[string]interface{}{
-				"user_id": user_id,
-			}
-
-			dataBytes, err := json.Marshal(dataContent)
-			if err != nil {
-				panic(err)
-			}
-
-			jResp := ServerResponse{"response", "success", request.RequestId, "", dataBytes}
-			if err := ws.WriteJSON(jResp); err != nil {
-				fmt.Println("Failed to send response: ", err.Error())
-			}
-
-			// Save username and connection
-			s.conns[loginReq.Username] = ws
-			username = loginReq.Username // Save username for reference
-			fmt.Println(username, " logged in.")
-		case ActionLogout:
-			var logOutRequest LogoutRequest
-			json.Unmarshal(request.Data, &logOutRequest)
-			// Perform logout
-			// Send response and the connection, and stop this routine
-			resp := ServerResponse{"response", "success", request.RequestId, "", json.RawMessage{}}
-			ws.WriteJSON(resp)
-			time.Sleep(50 * time.Millisecond) // Wait a little to make sure the message reaches the client
-			ws.Close()
-			cancel() // Stop the goroutine
-		case ActionSignUp:
-			var signReq SignUpRequest
-			json.Unmarshal(request.Data, &signReq)
-			exists, err := UserExistsDB(signReq.Username)
-			if exists {
-				fmt.Println(fmt.Errorf("sign-up error: %v", err))
-				resp := ServerResponse{"response", "fail", request.RequestId, fmt.Sprintf(`{"error": "%s"}`, err.Error()), nil}
-				if err := ws.WriteJSON(resp); err != nil {
-					fmt.Println("Failed to send response: ", err.Error())
+				err = NewUserDB(signReq.Username, signReq.Password, signReq.Email) // Send create new user request to database
+				if err != nil {
+					fmt.Println(fmt.Errorf("sign-up error: %v", err))
+					resp := ServerResponse{"response", "fail", request.RequestId, fmt.Sprintf(`{"error": "%s"}`, err.Error()), nil}
+					if err := ws.WriteJSON(resp); err != nil {
+						fmt.Println("Failed to send response: ", err.Error())
+					}
+					continue
+				} else {
+					resp := ServerResponse{"response", "success", request.RequestId, "", nil}
+					if err := ws.WriteJSON(resp); err != nil {
+						fmt.Println("Failed to send response: ", err.Error())
+					}
+					continue
 				}
-				continue
-			}
-			err = NewUserDB(signReq.Username, signReq.Password, signReq.Email) // Send create new user request to database
-			if err != nil {
-				fmt.Println(fmt.Errorf("sign-up error: %v", err))
-				resp := ServerResponse{"response", "fail", request.RequestId, fmt.Sprintf(`{"error": "%s"}`, err.Error()), nil}
-				if err := ws.WriteJSON(resp); err != nil {
-					fmt.Println("Failed to send response: ", err.Error())
+			case ActionSendMessage:
+				var sendReq MessageRequest
+				json.Unmarshal(request.Data, &sendReq)                            // Unwrap data portion of Json (nested Json)
+				err := NewMessageDB(sendReq.RoomID, sendReq.UserID, sendReq.Body) // ================= How does user know roomID
+				if err != nil {
+					fmt.Println(fmt.Errorf("send message failed: %v", err))
 				}
-				continue
-			} else {
 				resp := ServerResponse{"response", "success", request.RequestId, "", nil}
 				if err := ws.WriteJSON(resp); err != nil {
-					fmt.Println("Failed to send response: ", err.Error())
+					fmt.Println("Failed to send message response: ", err.Error())
 				}
-				continue
-			}
-		case ActionSendMessage:
-			var sendReq MessageRequest
-			json.Unmarshal(request.Data, &sendReq)                            // Unwrap data portion of Json (nested Json)
-			err := NewMessageDB(sendReq.RoomID, sendReq.UserID, sendReq.Body) // ================= How does user know roomID
-			if err != nil {
-				fmt.Println(fmt.Errorf("send message failed: %v", err))
-			}
-			resp := ServerResponse{"response", "success", request.RequestId, "", nil}
-			if err := ws.WriteJSON(resp); err != nil {
-				fmt.Println("Failed to send message response: ", err.Error())
-			}
 
-			// Send message to the Room struct stored locally
-			rooms[sendReq.RoomID].SendMessage(sendReq.RoomID, sendReq.UserID, username, ws, sendReq.Body)
+				// Send message to the Room struct stored locally
+				rooms[sendReq.RoomID].SendMessage(sendReq.RoomID, sendReq.UserID, username, ws, sendReq.Body)
 
-		case ActionJoinRoom:
-			var joinRReq JoinRoomRequest
-			json.Unmarshal(request.Data, &joinRReq)
-			// Update SQL table
-			_, exists := rooms[joinRReq.RoomID]
-			if !exists {
-				fmt.Println("Error, chat does not exist")
-				resp := ServerResponse{"response", "fail", request.RequestId, "Chat with provided ID does not exist", nil}
-				if err := ws.WriteJSON(resp); err != nil {
-					fmt.Println("Failed to send joinRoom response: ", err.Error())
+			case ActionJoinRoom:
+				var joinRReq JoinRoomRequest
+				json.Unmarshal(request.Data, &joinRReq)
+				// Update SQL table
+				_, exists := rooms[joinRReq.RoomID]
+				if !exists {
+					fmt.Println("Error, chat does not exist")
+					resp := ServerResponse{"response", "fail", request.RequestId, "Chat with provided ID does not exist", nil}
+					if err := ws.WriteJSON(resp); err != nil {
+						fmt.Println("Failed to send joinRoom response: ", err.Error())
+					}
 				}
-			}
-			// sub user in Redis server for real-time messaging =======================================================
-			// Sub user in *Room struct (add connection to the list) // this is absolete as soon the real-time messaging will be handled by Redis
-			err := JoinRoomDB(joinRReq.RoomID, joinRReq.Username)
-			if err != nil {
-				fmt.Println(fmt.Errorf("error joining room: %v", err))
-				jResp := ServerResponse{"response", "fail", request.RequestId, err.Error(), nil}
-				if err := ws.WriteJSON(jResp); err != nil {
-					fmt.Println("Failed to send joinRoom response: ", err.Error())
+				// sub user in Redis server for real-time messaging =======================================================
+				// Sub user in *Room struct (add connection to the list) // this is absolete as soon the real-time messaging will be handled by Redis
+				err := JoinRoomDB(joinRReq.RoomID, joinRReq.Username)
+				if err != nil {
+					fmt.Println(fmt.Errorf("error joining room: %v", err))
+					jResp := ServerResponse{"response", "fail", request.RequestId, err.Error(), nil}
+					if err := ws.WriteJSON(jResp); err != nil {
+						fmt.Println("Failed to send joinRoom response: ", err.Error())
+					}
 				}
-			}
-			rooms[joinRReq.RoomID].Join(ws) // Join room locally, in server record
-		case ActionLeaveRoom:
-			var leaveRReq LeaveRoomRequest
-			json.Unmarshal(request.Data, &leaveRReq)
-			_, exists := rooms[leaveRReq.RoomID]
-			if !exists {
-				fmt.Println("Error, chat does not exist")
-				resp := ServerResponse{"response", "fail", request.RequestId, "Chat with provided ID does not exist", nil}
-				if err := ws.WriteJSON(resp); err != nil {
-					fmt.Println("Failed to send response: ", err.Error())
+				rooms[joinRReq.RoomID].Join(ws) // Join room locally, in server record
+			case ActionLeaveRoom:
+				var leaveRReq LeaveRoomRequest
+				json.Unmarshal(request.Data, &leaveRReq)
+				_, exists := rooms[leaveRReq.RoomID]
+				if !exists {
+					fmt.Println("Error, chat does not exist")
+					resp := ServerResponse{"response", "fail", request.RequestId, "Chat with provided ID does not exist", nil}
+					if err := ws.WriteJSON(resp); err != nil {
+						fmt.Println("Failed to send response: ", err.Error())
+					}
 				}
-			}
-			rooms[leaveRReq.RoomID].Leave(ws)
-		case ActionDirectMessage:
-			var dirMReq DirectMessageRequest
-			json.Unmarshal(request.Data, &dirMReq)
+				rooms[leaveRReq.RoomID].Leave(ws)
+			case ActionDirectMessage:
+				var dirMReq DirectMessageRequest
+				json.Unmarshal(request.Data, &dirMReq)
 
-			// For now, just leave local chatroom, later will remove user from chatroom_participants list in database
-			room_id, err := NewChatRoomDB(dirMReq.Sender)
-			if err != nil {
-				fmt.Println(fmt.Errorf("error creating direct message room"))
-				resp := ServerResponse{"response", "fail", request.RequestId, err.Error(), nil}
-				if err := ws.WriteJSON(resp); err != nil {
-					fmt.Println("Failed to send response: ", err.Error())
-				}
-				continue
-			} else {
-				// Create new chatroom
-				rooms[room_id] = NewRoom()
-				rooms[room_id].members[ws] = true
+				// For now, just leave local chatroom, later will remove user from chatroom_participants list in database
+				room_id, err := NewChatRoomDB(dirMReq.Sender)
+				if err != nil {
+					fmt.Println(fmt.Errorf("error creating direct message room"))
+					resp := ServerResponse{"response", "fail", request.RequestId, err.Error(), nil}
+					if err := ws.WriteJSON(resp); err != nil {
+						fmt.Println("Failed to send response: ", err.Error())
+					}
+					continue
+				} else {
+					// Create new chatroom
+					rooms[room_id] = NewRoom()
+					rooms[room_id].members[ws] = true
 
-				resp := ServerResponse{"response", "success", request.RequestId, "", nil}
-				if err := ws.WriteJSON(resp); err != nil {
-					fmt.Println("Failed to send create room response: ", err.Error())
+					resp := ServerResponse{"response", "success", request.RequestId, "", nil}
+					if err := ws.WriteJSON(resp); err != nil {
+						fmt.Println("Failed to send create room response: ", err.Error())
+					}
 				}
 			}
 		}

@@ -29,6 +29,7 @@ class _MessagesPageState extends State<MessagesScreen> {
     }
 
     return Scaffold(
+      // appBar: AppBar(title: Text('My App')),
       backgroundColor: Theme.of(context).colorScheme.tertiaryContainer,
       body: Row(
         children: [
