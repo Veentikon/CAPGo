@@ -21,7 +21,7 @@ class _AuthenticationPageState extends State<AuthenticationPage> with SingleTick
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 3, vsync: this); 
     _tabController.addListener(() {
       setState(() {
         selectedScreen = _tabController.index;
