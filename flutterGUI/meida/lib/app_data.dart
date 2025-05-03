@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:english_words/english_words.dart';
 import 'package:flutter/material.dart';
 import '/backend/server_conn_controller.dart';
@@ -7,10 +6,9 @@ import '/backend/chat_data.dart';
 import 'backend/storage.dart';
 
 
-class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allowes to notify others about it's changes
+class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allows to notify others about it's changes
   var current = WordPair.random(); // Deprecated functionality
   PersistentWebSocketManager socketManager = PersistentWebSocketManager();
-
 
   final Map<String, ChatData> _chats = {};
   final Map<String, ChatMetaData> _chatList = {};
