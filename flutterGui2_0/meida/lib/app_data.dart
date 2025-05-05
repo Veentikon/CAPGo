@@ -24,11 +24,13 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
   Color color4Accent = Color.fromRGBO(61, 61, 61, 1);
 
   bool isLoading = false;
-  bool loggedIn = true; // Reset to false when done testing
+  bool loggedIn = false; // Reset to false when done testing
 
   // Hadrcoded temporary credentials
-  var currentUser = "admin";
-  var password = "password";
+  var currentUser = "";
+
+  var testUser = "admin";
+  var testPassword = "password";
 
   late ServerConnController server;
   late WebSocketChannel socket;
@@ -40,9 +42,8 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
   // var loggedInAsGuest = false;
   // var guestUsername = "";
 
-  MyAppState() {
+  MyAppState() { // Should be triggered only on login
     server = ServerConnController(socketManager);
-    // _initializeChats(); // Load from disk or stub with test data
   }
 
   void setNotLoading() {
@@ -84,11 +85,11 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
     notifyListeners();
   }
 
-  // void disconnectFromServer() {
-  //   server.disconnect();
-  //   _connected = false;
-  //   notifyListeners();
-  // }
+  void disconnectFromServer() {
+    socketManager.disconnect();
+    _connected = false;
+    notifyListeners();
+  }
 
   Future<bool> waitForConnection({Duration timeout = const Duration(seconds: 5)}) async {
     try {
@@ -133,59 +134,69 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
 
   // Login as a user
   Future<String> logIn(String name, String passwrd) async {
-    // if (isLoading) return "A related task is working, cannot login";
-    loggedIn = true;
+    if (isLoading) return "A related task is working, cannot login";
+
+    isLoading = true;
     notifyListeners();
-    return "logged in";
 
-    // isLoading = true;
-    // notifyListeners();
+    if (testUser != "") {
+      if (name==testUser && passwrd==testPassword) {
+        await Future.delayed(const Duration(seconds: 5));
+        isLoading = false;
+        loggedIn = true;
+        notifyListeners();
+        return "success";
+      } else {
+        // return ConnectionState.fail;
+        return "fail";
+      }
+    }
 
-    // try {
-    //   // Trigger socket connection if not already connected
-    //   await socketManager.connect(); // Will this work or should we call handle disconnect
+    try {
+      // Trigger socket connection if not already connected
+      await socketManager.connect(); // Will this work or should we call handle disconnect
 
-    //   if (!socketManager.isConnected) {
-    //     // Wait for either a successful or failed connection (in case there is a delay)
-    //     final status = await socketManager.onStatusChange
-    //       .firstWhere((s) =>
-    //           s == ConnectionStatus.connected || s == ConnectionStatus.fail)
-    //       .timeout(const Duration(seconds: 10), onTimeout: () {
-    //         logger.w("Connection timed out.");
-    //         return ConnectionStatus.fail;
-    //       });
+      if (!socketManager.isConnected) {
+        // Wait for either a successful or failed connection (in case there is a delay)
+        final status = await socketManager.onStatusChange
+          .firstWhere((s) =>
+              s == ConnectionStatus.connected || s == ConnectionStatus.fail)
+          .timeout(const Duration(seconds: 10), onTimeout: () {
+            logger.w("Connection timed out.");
+            return ConnectionStatus.fail;
+          });
 
-    //     if (status != ConnectionStatus.connected) {
-    //       isLoading = false;
-    //       notifyListeners(); // The UI must know that the connection failed
-    //       return "Server is unreachable.";
-    //     }
-    //   }
+        if (status != ConnectionStatus.connected) {
+          isLoading = false;
+          notifyListeners(); // The UI must know that the connection failed
+          return "Server is unreachable.";
+        }
+      }
 
-    //   // Attempt login via server
-    //   var (res, id) = await server.sendLoginRequest(name, passwrd); // This is where the second login gets stuck
-    //   logger.i("Login request sent, result: $res");
+      // Attempt login via server
+      var (res, id) = await server.sendLoginRequest(name, passwrd); // This is where the second login gets stuck
+      logger.i("Login request sent, result: $res");
 
-    //   if (res == 0) {
-    //     loggedIn = true;
-    //     currentUser = id!;
-    //     _initializeChats(); // Load cached messages
-    //     return "";
-    //   } else {
-    //     logger.i("Login failed with server response: $res");
-    //     return "Invalid username or password.";
-    //   }
-    // } catch (e) {
-    //   if (e is SocketException) {
-    //     logger.w("Server is unreachable.");
-    //     return "Server is down or unreachable.";
-    //   }
-    //   logger.w("Unexpected error: $e");
-    //   return "Login failed due to unexpected error.";
-    // } finally {
-    //   isLoading = false;
-    //   notifyListeners();
-    // }
+      if (res == 0) {
+        loggedIn = true;
+        currentUser = id!;
+        _initializeChats(); // Load cached messages
+        return "";
+      } else {
+        logger.i("Login failed with server response: $res");
+        return "Invalid username or password.";
+      }
+    } catch (e) {
+      if (e is SocketException) {
+        logger.w("Server is unreachable.");
+        return "Server is down or unreachable.";
+      }
+      logger.w("Unexpected error: $e");
+      return "Login failed due to unexpected error.";
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<String> signUp(String name, String passwrd, String email) async { // Refactor function and its dependants

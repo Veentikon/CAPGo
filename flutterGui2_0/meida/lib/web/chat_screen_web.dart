@@ -79,7 +79,7 @@ class _MessagingPageState extends State<ChatUI> {
                     borderRadius: BorderRadius.circular(16.0),
                   ),
                   constraints: const BoxConstraints(
-                    maxWidth: 300, // Optional: to prevent too-long lines
+                    maxWidth: 360, // Optional: to prevent too-long lines
                   ),
                   child: Text(
                     msg.content,
@@ -95,7 +95,8 @@ class _MessagingPageState extends State<ChatUI> {
           child: Container(
             alignment: Alignment.bottomCenter,
             padding: EdgeInsets.all(3.0), // This padding is applied inside of the Container
-            decoration: BoxDecoration(color: const Color.fromARGB(255, 109, 177, 214), borderRadius: BorderRadius.circular(20.0)),
+            // decoration: BoxDecoration(color: const Color.fromARGB(255, 109, 177, 214), borderRadius: BorderRadius.circular(20.0)),
+            
             child: Row(
               children: [
                 Icon(Icons.emoji_emotions_outlined, color: Colors.amber),
@@ -124,9 +125,12 @@ class _MessagingPageState extends State<ChatUI> {
                     controller: _controller,
                     maxLines: 3,
                     minLines: 1,
+                    style: TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      border: InputBorder.none,
-                      hintStyle: TextStyle(),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(20.0)), borderSide: BorderSide(color: Color.fromRGBO(247, 55, 79, 1.0))),
+                      // border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(20.0)), borderSide: BorderSide(color: Color.fromRGBO(247, 55, 79, 1.0))),
+                      hintStyle: TextStyle(color: Colors.white),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(20.0)), borderSide: BorderSide(color: Color.fromRGBO(247, 55, 79, 1.0))),
                       hintText: "Message... ",
                     ),
                   ),
