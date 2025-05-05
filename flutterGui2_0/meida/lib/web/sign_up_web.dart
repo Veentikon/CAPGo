@@ -9,6 +9,21 @@ class SignUpWeb extends StatefulWidget {
 }
 
 class _SignUpWebState extends State<SignUpWeb> {
+  final TextEditingController uNameController = TextEditingController();
+  final TextEditingController pswrdController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController pConfController = TextEditingController();
+
+  @override
+  void dispose() {
+    super.dispose();
+    uNameController.dispose();
+    pswrdController.dispose();
+    emailController.dispose();
+    pConfController.dispose();
+
+  }
+
   @override
   Widget build(BuildContext context) {
     Color color1 = Color.fromRGBO(247, 55, 79, 1.0);
@@ -20,21 +35,22 @@ class _SignUpWebState extends State<SignUpWeb> {
     Color color4 = Color.fromRGBO(44, 44, 44, 1.0);
     Color color4Accent = Color.fromRGBO(61, 61, 61, 1);
 
-    final TextEditingController uNameController = TextEditingController();
-    final TextEditingController pswrdController = TextEditingController();
-    final TextEditingController emailController = TextEditingController();
-    final TextEditingController pConfController = TextEditingController();
-
     return Scaffold(
-      appBar: AppBar(
-        elevation: 10.0,
-        shadowColor: Colors.black,
-        backgroundColor: color4Accent,
-        actions: [
-          SansBold(text: "Login", size: 18.0),
-          SansBold(text: "Sign up", size: 18.0),
-        ],
-      ),
+      // appBar: AppBar(
+      //   elevation: 10.0,
+      //   shadowColor: Colors.black,
+      //   backgroundColor: color4Accent,
+      //   // actionsPadding: EdgeInsets.all(2.0),
+      //   title: Row(
+      //     mainAxisAlignment: MainAxisAlignment.center,
+      //     // crossAxisAlignment: CrossAxisAlignment.center,
+      //     children: [
+      //       SansBold(text: "Login", size: 18.0),
+      //       SizedBox(width: 10.0,),
+      //       SansBold(text: "Sign up", size: 18.0),
+      //     ],
+      //   ),
+      // ),
       backgroundColor: color4,
       body: Center(
         child: Column(

@@ -1,15 +1,17 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:meida/backend/server_conn_controller.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 // import '/backend/server_conn_controller.dart';
-// import '/backend/chat_data.dart';
-// import 'backend/storage.dart';
+import '/backend/chat_data.dart';
+import 'backend/storage.dart';
 
 
-class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allowes to notify others about it's changes
-  // PersistentWebSocketManager socketManager = PersistentWebSocketManager();
-  // final Map<String, ChatData> _chats = {};
-  // final Map<String, ChatMetaData> _chatList = {};
+class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allows to notify others about it's changes
+  PersistentWebSocketManager socketManager = PersistentWebSocketManager();
+  final Map<String, ChatData> _chats = {};
+  final Map<String, ChatMetaData> _chatList = {};
 
 
   Color color1 = Color.fromRGBO(247, 55, 79, 1.0);
@@ -21,67 +23,66 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
   Color color4 = Color.fromRGBO(44, 44, 44, 1.0);
   Color color4Accent = Color.fromRGBO(61, 61, 61, 1);
 
-  var currentUser = "";
   bool isLoading = false;
+  bool loggedIn = true; // Reset to false when done testing
 
-  // late ServerConnController server;
-  // late WebSocketChannel socket;
-  // bool _connected = false;
-  // bool get isConnected => _connected; // Getter for _connected
-
-  // Temporarily hardcoded creds replace with server login request ===========================================
-  // Used for testing purposes
-  var username = "admin";
+  // Hadrcoded temporary credentials
+  var currentUser = "admin";
   var password = "password";
 
-  // Account login status
-  var loggedInAsUser = false;
-  var loggedInAsGuest = false;
-  var guestUsername = "";
+  late ServerConnController server;
+  late WebSocketChannel socket;
+  bool _connected = false;
+  bool get isConnected => _connected; // Getter for _connected
 
-  // MyAppState() {
-  //   server = ServerConnController(socketManager);
-  //   _initializeChats(); // Load from disk or stub with test data
-  // }
+  // Account login status
+  // var loggedInAsUser = false;
+  // var loggedInAsGuest = false;
+  // var guestUsername = "";
+
+  MyAppState() {
+    server = ServerConnController(socketManager);
+    // _initializeChats(); // Load from disk or stub with test data
+  }
 
   void setNotLoading() {
     isLoading = false;
     notifyListeners();
   }
 
-  // /// this can have two parts, load from local cache and load from DB
-  // Future<void> _initializeChats() async {
-  //   // Load Chat data from user data cache
-  //   var chatDataList = await loadChatData(currentUser);
-  //   _chats.addEntries(chatDataList.map((data) => MapEntry(data.id, data)));
-  //   // Load Chat meta data from user data cache
-  //   var chatMetaDataList = await loadChatMetaData(currentUser);
-  //   _chatList.addEntries(chatMetaDataList.map((data) => MapEntry(data.id, data)));
-  //   notifyListeners();
-  // }
+  /// this can have two parts, load from local cache and load from DB
+  Future<void> _initializeChats() async {
+    // Load Chat data from user data cache
+    var chatDataList = await loadChatData(currentUser);
+    _chats.addEntries(chatDataList.map((data) => MapEntry(data.id, data)));
+    // Load Chat meta data from user data cache
+    var chatMetaDataList = await loadChatMetaData(currentUser);
+    _chatList.addEntries(chatMetaDataList.map((data) => MapEntry(data.id, data)));
+    notifyListeners();
+  }
 
-  // ChatData getChat(String chatId) {
-  //   return _chats.putIfAbsent(chatId, () => ChatData(chatId, [], []));
-  // }
+  ChatData getChat(String chatId) {
+    return _chats.putIfAbsent(chatId, () => ChatData(chatId, [], []));
+  }
 
-  // ChatMetaData getChatMeta(String chatId) {
-  //   return _chatList.putIfAbsent(chatId, () => ChatMetaData(chatId, "", DateTime.now(), 0));
-  // }
+  ChatMetaData getChatMeta(String chatId) {
+    return _chatList.putIfAbsent(chatId, () => ChatMetaData(chatId, "", DateTime.now(), 0));
+  }
 
-  // void sendMessage(String chatId, String senderId, String content) {
-  //   var time = DateTime.now();
-  //   getChat(chatId).addMessage(senderId, content, time);
-  //   _updateLastActive(chatId, time);
+  void sendMessage(String chatId, String senderId, String content) {
+    var time = DateTime.now();
+    getChat(chatId).addMessage(senderId, content, time);
+    _updateLastActive(chatId, time);
 
-  //   server.sendChatroomMessageRequest(senderId, chatId, content); // May need to check whether the connection was live
-  //   notifyListeners();
-  // }
+    server.sendChatroomMessageRequest(senderId, chatId, content); // May need to check whether the connection was live
+    notifyListeners();
+  }
 
-  // void _updateLastActive(String chatId, DateTime time) {
-  //   final meta = getChatMeta(chatId);
-  //   meta.lastActive = time;
-  //   notifyListeners();
-  // }
+  void _updateLastActive(String chatId, DateTime time) {
+    final meta = getChatMeta(chatId);
+    meta.lastActive = time;
+    notifyListeners();
+  }
 
   // void disconnectFromServer() {
   //   server.disconnect();
@@ -89,17 +90,16 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
   //   notifyListeners();
   // }
 
-  // Future<bool> waitForConnection({Duration timeout = const Duration(seconds: 5)}) async {
-  //   try {
-  //     final status = await socketManager.onStatusChange
-  //         .firstWhere((s) => s == ConnectionStatus.connected || s == ConnectionStatus.fail)
-  //         .timeout(timeout);
-  //     return status == ConnectionStatus.connected;
-  //   } catch (_) {
-  //     return false;
-  //   }
-  // }
-
+  Future<bool> waitForConnection({Duration timeout = const Duration(seconds: 5)}) async {
+    try {
+      final status = await socketManager.onStatusChange
+          .firstWhere((s) => s == ConnectionStatus.connected || s == ConnectionStatus.fail)
+          .timeout(timeout);
+      return status == ConnectionStatus.connected;
+    } catch (_) {
+      return false;
+    }
+  }
 
   // // Guest login that requires only username
   // void logInGuest(String name) async { // What is better, to return the value, or 
@@ -131,114 +131,108 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
   //   return;
   // }
 
-  // // Login as a user
-  // Future<String> logIn(String name, String passwrd) async {
-  //   if (isLoading) return "A related task is working, cannot login";
+  // Login as a user
+  Future<String> logIn(String name, String passwrd) async {
+    // if (isLoading) return "A related task is working, cannot login";
+    loggedIn = true;
+    notifyListeners();
+    return "logged in";
 
-  //   isLoading = true;
-  //   notifyListeners();
+    // isLoading = true;
+    // notifyListeners();
 
-  //   try {
-  //     // Trigger socket connection if not already connected
-  //     await socketManager.connect(); // Will this work or should we call handle disconnect
+    // try {
+    //   // Trigger socket connection if not already connected
+    //   await socketManager.connect(); // Will this work or should we call handle disconnect
 
-  //     if (!socketManager.isConnected) {
-  //       // Wait for either a successful or failed connection (in case there is a delay)
-  //       final status = await socketManager.onStatusChange
-  //         .firstWhere((s) =>
-  //             s == ConnectionStatus.connected || s == ConnectionStatus.fail)
-  //         .timeout(const Duration(seconds: 10), onTimeout: () {
-  //           logger.w("Connection timed out.");
-  //           return ConnectionStatus.fail;
-  //         });
+    //   if (!socketManager.isConnected) {
+    //     // Wait for either a successful or failed connection (in case there is a delay)
+    //     final status = await socketManager.onStatusChange
+    //       .firstWhere((s) =>
+    //           s == ConnectionStatus.connected || s == ConnectionStatus.fail)
+    //       .timeout(const Duration(seconds: 10), onTimeout: () {
+    //         logger.w("Connection timed out.");
+    //         return ConnectionStatus.fail;
+    //       });
 
-  //       if (status != ConnectionStatus.connected) {
-  //         isLoading = false;
-  //         notifyListeners(); // The UI must know that the connection failed
-  //         return "Server is unreachable.";
-  //       }
-  //     }
+    //     if (status != ConnectionStatus.connected) {
+    //       isLoading = false;
+    //       notifyListeners(); // The UI must know that the connection failed
+    //       return "Server is unreachable.";
+    //     }
+    //   }
 
-  //     // Attempt login via server
-  //     var (res, id) = await server.sendLoginRequest(name, passwrd); // This is where the second login gets stuck
-  //     logger.i("Login request sent, result: $res");
+    //   // Attempt login via server
+    //   var (res, id) = await server.sendLoginRequest(name, passwrd); // This is where the second login gets stuck
+    //   logger.i("Login request sent, result: $res");
 
-  //     if (res == 0) {
-  //       loggedInAsUser = true;
-  //       currentUser = id!;
-  //       _initializeChats(); // Load cached messages
-  //       return "";
-  //     } else {
-  //       logger.i("Login failed with server response: $res");
-  //       return "Invalid username or password.";
-  //     }
-  //   } catch (e) {
-  //     if (e is SocketException) {
-  //       logger.w("Server is unreachable.");
-  //       return "Server is down or unreachable.";
-  //     }
-  //     logger.w("Unexpected error: $e");
-  //     return "Login failed due to unexpected error.";
-  //   } finally {
-  //     isLoading = false;
-  //     notifyListeners();
-  //   }
-  // }
+    //   if (res == 0) {
+    //     loggedIn = true;
+    //     currentUser = id!;
+    //     _initializeChats(); // Load cached messages
+    //     return "";
+    //   } else {
+    //     logger.i("Login failed with server response: $res");
+    //     return "Invalid username or password.";
+    //   }
+    // } catch (e) {
+    //   if (e is SocketException) {
+    //     logger.w("Server is unreachable.");
+    //     return "Server is down or unreachable.";
+    //   }
+    //   logger.w("Unexpected error: $e");
+    //   return "Login failed due to unexpected error.";
+    // } finally {
+    //   isLoading = false;
+    //   notifyListeners();
+    // }
+  }
 
+  Future<String> signUp(String name, String passwrd, String email) async { // Refactor function and its dependants
+    if (isLoading) return "A related task is working, cannot login";
+    socketManager.connect();
 
-  // Future<String> signUp(String name, String passwrd, String email) async { // Refactor function and its dependants
-  //   if (isLoading) return "A related task is working, cannot login";
-  //   socketManager.connect();
+    isLoading = true;
+    notifyListeners();
 
-  //   isLoading = true;
-  //   notifyListeners();
+    try {
+      int res = await server.sendSignUpRequest(name, passwrd, email); // Send login request to the server, How do I wait for response?
+      isLoading = false;
 
-  //   try {
-  //     int res = await server.sendSignUpRequest(name, passwrd, email); // Send login request to the server, How do I wait for response?
-  //     isLoading = false;
+      if (res == 0){
+        return "";
+      } else {
+        // errorMessage = "Login failed";
+        notifyListeners();
+        logger.i("Sign up failed");
+        return "Sign up failed";
+      }
+    } catch (e) {
+      logger.w(e.toString());
+      return "Sign up failed";
+    }
+  }
 
-  //     if (res == 0){
-  //       return "";
-  //     } else {
-  //       // errorMessage = "Login failed";
-  //       notifyListeners();
-  //       logger.i("Sign up failed");
-  //       return "Sign up failed";
-  //     }
-  //   } catch (e) {
-  //     logger.w(e.toString());
-  //     return "Sign up failed";
-  //   }
-  // }
+  // Logout both, user and guest
+  void logOut() {
+    // Temporary implementation
+    loggedIn = false;
+    // print(loggedIn);
+    notifyListeners();
+    // return "logged in";
 
-  // // Logout both, user and guest
-  // void logOut() {
-  //   isLoading = true;
-  //   loggedInAsUser = false;
-  //   loggedInAsGuest = false;
-  //   server.sendLogoutRequest(currentUser); // We are not going to wait for response
+    // isLoading = true;
+    // loggedIn = false;
+    // print("logged out");
+    // // loggedInAsUser = false;
+    // // loggedInAsGuest = false;
+    // server.sendLogoutRequest(currentUser); // We are not going to wait for response
 
-  //   saveChatData(currentUser, _chats.values.toList()); // Convert Map<String ChatData> to List<ChatData>
-  //   saveChatMetaData(currentUser, _chatList.values.toList()); // Convert Map<String ChatMetaData> to List<ChatMetaData>
+    // saveChatData(currentUser, _chats.values.toList()); // Convert Map<String ChatData> to List<ChatData>
+    // saveChatMetaData(currentUser, _chatList.values.toList()); // Convert Map<String ChatMetaData> to List<ChatMetaData>
 
-  //   socketManager.dispose(); // Dispose of the connection
-  //   isLoading = false;
-  //   notifyListeners();
-  // }
-
-  // Deprecated part of the code =====================================
-  // Next button handler
-  // void getNext() {
-  //   current = WordPair.random();
-  //   notifyListeners();
-  // }
-  // var favorites = <WordPair>[]; // A list
-  // void toggleFavorite() {
-  //   if (favorites.contains(current)) {
-  //     favorites.remove(current);
-  //   } else {
-  //     favorites.add(current);
-  //   }
-  //   notifyListeners();
-  // }
+    // socketManager.dispose(); // Dispose of the connection
+    // isLoading = false;
+    // notifyListeners();
+  }
 }

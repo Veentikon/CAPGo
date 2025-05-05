@@ -25,17 +25,21 @@ class _LoginMobileState extends State<LoginMobile> {
     final TextEditingController uNameController = TextEditingController();
     final TextEditingController pswrdController = TextEditingController();
     return Scaffold(
-      appBar: AppBar(
-        elevation: 10.0,
-        shadowColor: Colors.black,
-        backgroundColor: color4Accent,
-        // actionsPadding: EdgeInsets.all(2.0),
-        actions: [
-          SansBold(text: "Login", size: 18.0),
-          Spacer(),
-          SansBold(text: "Sign up", size: 18.0),
-        ],
-      ),
+      // appBar: AppBar(
+      //   elevation: 10.0,
+      //   shadowColor: Colors.black,
+      //   backgroundColor: color4Accent,
+      //   // actionsPadding: EdgeInsets.all(2.0),
+      //   title: Row(
+      //     mainAxisAlignment: MainAxisAlignment.center,
+      //     // crossAxisAlignment: CrossAxisAlignment.center,
+      //     children: [
+      //       SansBold(text: "Login", size: 18.0),
+      //       SizedBox(width: 10.0,),
+      //       SansBold(text: "Sign up", size: 18.0),
+      //     ],
+      //   ),
+      // ),
       backgroundColor: color4,
       body: Center(
         child: Column(
@@ -56,7 +60,9 @@ class _LoginMobileState extends State<LoginMobile> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(5.0),
               ),
-              onPressed: () {},
+              onPressed: () {
+                
+              },
               child: Sans(text: "Login", size: 17.0)
             ),
           ],

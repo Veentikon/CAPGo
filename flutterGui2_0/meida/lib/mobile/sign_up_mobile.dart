@@ -26,15 +26,15 @@ class _SignUpMobileState extends State<SignUpMobile> {
     final TextEditingController pConfController = TextEditingController();
 
     return Scaffold(
-      appBar: AppBar(
-        elevation: 10.0,
-        shadowColor: Colors.black,
-        backgroundColor: color4Accent,
-        actions: [
-          SansBold(text: "Login", size: 18.0),
-          SansBold(text: "Sign up", size: 18.0),
-        ],
-      ),
+      // appBar: AppBar(
+      //   elevation: 10.0,
+      //   shadowColor: Colors.black,
+      //   backgroundColor: color4Accent,
+      //   actions: [
+      //     SansBold(text: "Login", size: 18.0),
+      //     SansBold(text: "Sign up", size: 18.0),
+      //   ],
+      // ),
       backgroundColor: color4,
       body: Center(
         child: Column(

@@ -1,0 +1,14 @@
+
+=== Choosing the AppBar style ===
+The objective is to make the user experience as seemless as possible, this includes puting the available actions as close to 
+user's reach as possible.
+
+There are couple of ways of handling AppBar and actions
+With actions we add buttons and stuff to the right side of the bar.
+With leading property we add them to the left.
+It is also possible to use the title and place a row of button widgets, this provides the most flexibility in positioning them.
+
+The third option works best in case of authorization screen, considering that with rezising, the AppBar will not be affected since
+there are only a handful actions that should fit a small sized screen.
+This approach will not work for many actions, instead, use a humburder button with toolbar left or right.
+

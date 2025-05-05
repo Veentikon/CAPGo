@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class TextForm extends StatelessWidget {
@@ -89,5 +90,116 @@ class Sans extends StatelessWidget {
         color: color ?? Colors.white,
       )
     );
+  }
+}
+
+
+class TabsWeb extends StatefulWidget {
+  final String title;
+  final String route;
+  const TabsWeb({super.key, required this.title, required this.route});
+
+  @override
+  State<TabsWeb> createState() => _TabsWebState();
+}
+
+class _TabsWebState extends State<TabsWeb> {
+  bool isSelected = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        context.go(widget.route);
+      },
+      child: MouseRegion(
+        onEnter: (_) {
+          setState(() {
+            isSelected = true;
+          });
+        },
+        onExit: (_) {
+          setState(() {
+            isSelected = false;
+          });
+        },
+        child: AnimatedDefaultTextStyle(
+          duration: const Duration(milliseconds: 100),
+          curve: Curves.elasticIn,
+          style: isSelected?GoogleFonts.oswald(
+            shadows: [Shadow(color: Colors.white, offset: Offset(0, -6 ),
+            )],
+            fontSize: 25.0,
+            color: Colors.transparent,
+            decoration: TextDecoration.underline,
+            decorationThickness: 2.0,
+            // decorationColor: Colors.tealAccent,
+            decorationColor: Color.fromRGBO(247, 55, 79, 1.0),
+          ): 
+          GoogleFonts.oswald(color: Colors.black, fontSize:20.0 ),
+          child: Text(widget.title
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class TabsMobile extends StatefulWidget {
+  final String text;
+  final String route;
+  const TabsMobile({super.key, required this.text, required this.route});
+
+  @override
+  State<TabsMobile> createState() => _TabsMobileState();
+}
+
+class _TabsMobileState extends State<TabsMobile> {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialButton(
+      elevation: 20.0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(5.0),
+      ),
+      color: Color.fromRGBO(139, 39, 51, 1),
+      height: 50.0,
+      minWidth: 200.0,
+      child: Text(widget.text,
+        style: GoogleFonts.openSans(
+          fontSize: 20.0,
+          color: Colors.white,
+        )
+      ),
+      onPressed: () {
+        context.go(widget.route);
+      },
+    );
+  }
+}
+
+
+/// Elements used to display communication channel / conversations and messages
+class ChatBox extends StatelessWidget {
+  // Need to get all the info from the Chat data
+  const ChatBox({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(Icons.account_balance_outlined),
+        Sans(text: "User", size: 10.0),
+      ],
+    );
+  }
+}
+
+class MessageBox extends StatelessWidget {
+  const MessageBox({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Placeholder();
   }
 }
