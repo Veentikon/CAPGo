@@ -15,7 +15,7 @@ import 'package:meida/web/settings_web.dart';
 import 'package:meida/web/sign_up_web.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:meida/mobile/login_mobile.dart';
+// import 'package:meida/mobile/login_mobile.dart';
 
 void main() {
   runApp(

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:meida/app_data.dart';
 import 'package:meida/components/misc.dart';
 import 'package:provider/provider.dart';
+import 'package:meida/backend/server_conn_controller.dart';
 
 class LoginWeb extends StatefulWidget {
   const LoginWeb({super.key});
@@ -164,6 +166,18 @@ class _LoginPageState extends State<LoginPage> {
                     pswrdController.clear();
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result))); // Propagate the error message to the user
                   }
+                  // if (result != "" && context.mounted) {
+                  //   usrnmController.clear();
+                  //   pswrdController.clear();
+
+                  //   WidgetsBinding.instance.addPostFrameCallback((_) {
+                  //     if (context.mounted) {
+                  //       ScaffoldMessenger.of(context).showSnackBar(
+                  //         SnackBar(content: Text(result)),
+                  //       );
+                  //     }
+                  //   });
+                  // }
                 },
                 child: appState.isLoading 
                   ? Row(

@@ -5,7 +5,7 @@ import 'package:meida/backend/server_conn_controller.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 // import '/backend/server_conn_controller.dart';
 import '/backend/chat_data.dart';
-import 'backend/storage.dart';
+// import 'backend/storage.dart';
 
 
 class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allows to notify others about it's changes
@@ -51,16 +51,16 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
     notifyListeners();
   }
 
-  /// this can have two parts, load from local cache and load from DB
-  Future<void> _initializeChats() async {
-    // Load Chat data from user data cache
-    var chatDataList = await loadChatData(currentUser);
-    _chats.addEntries(chatDataList.map((data) => MapEntry(data.id, data)));
-    // Load Chat meta data from user data cache
-    var chatMetaDataList = await loadChatMetaData(currentUser);
-    _chatList.addEntries(chatMetaDataList.map((data) => MapEntry(data.id, data)));
-    notifyListeners();
-  }
+  // /// this can have two parts, load from local cache and load from DB
+  // Future<void> _initializeChats() async {
+  //   // Load Chat data from user data cache
+  //   var chatDataList = await loadChatData(currentUser);
+  //   _chats.addEntries(chatDataList.map((data) => MapEntry(data.id, data)));
+  //   // Load Chat meta data from user data cache
+  //   var chatMetaDataList = await loadChatMetaData(currentUser);
+  //   _chatList.addEntries(chatMetaDataList.map((data) => MapEntry(data.id, data)));
+  //   notifyListeners();
+  // }
 
   ChatData getChat(String chatId) {
     return _chats.putIfAbsent(chatId, () => ChatData(chatId, [], []));
@@ -139,6 +139,7 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
     isLoading = true;
     notifyListeners();
 
+    // This block is for testing purposes, if default creds are set, they are used instead of request to server
     if (testUser != "") {
       if (name==testUser && passwrd==testPassword) {
         await Future.delayed(const Duration(seconds: 1));
@@ -176,17 +177,24 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
 
       // Attempt login via server
       var (res, id) = await server.sendLoginRequest(name, passwrd); // This is where the second login gets stuck
-      logger.i("Login request sent, result: $res");
+      logger.i("Login request sent, response code: $res, user id: $id");
+      // if (res == 0) {
+      //   loggedIn = true;
+      //   return "success";
+      // } else {
+      //   return "fail";
+      // }
 
       if (res == 0) {
         loggedIn = true;
         currentUser = id!;
-        _initializeChats(); // Load cached messages
-        return "";
+        // _initializeChats(); // Load cached messages
+        return "success";
       } else {
         logger.i("Login failed with server response: $res");
         return "Invalid username or password.";
       }
+
     } catch (e) {
       if (e is SocketException) {
         logger.w("Server is unreachable.");
@@ -214,7 +222,7 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
       if (res == 0){
         return "";
       } else {
-        // errorMessage = "Login failed";
+        // errorMessage = "Sign up failed";
         notifyListeners();
         logger.i("Sign up failed");
         return "Sign up failed";
@@ -228,23 +236,22 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
   // Logout both, user and guest
   void logOut() {
     // Temporary implementation
-    loggedIn = false;
-    // print(loggedIn);
-    notifyListeners();
+    // loggedIn = false;
+    // // print(loggedIn);
+    // notifyListeners();
     // return "logged in";
 
-    // isLoading = true;
-    // loggedIn = false;
-    // print("logged out");
-    // // loggedInAsUser = false;
-    // // loggedInAsGuest = false;
-    // server.sendLogoutRequest(currentUser); // We are not going to wait for response
+    isLoading = true;
+    loggedIn = false;
+    // loggedInAsUser = false;
+    // loggedInAsGuest = false;
+    server.sendLogoutRequest(currentUser); // We are not going to wait for response
 
     // saveChatData(currentUser, _chats.values.toList()); // Convert Map<String ChatData> to List<ChatData>
     // saveChatMetaData(currentUser, _chatList.values.toList()); // Convert Map<String ChatMetaData> to List<ChatMetaData>
 
-    // socketManager.dispose(); // Dispose of the connection
-    // isLoading = false;
-    // notifyListeners();
+    socketManager.dispose(); // Dispose of the connection
+    isLoading = false;
+    notifyListeners();
   }
 }

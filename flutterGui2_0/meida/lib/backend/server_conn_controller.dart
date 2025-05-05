@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:uuid/uuid.dart';
 import 'package:logger/logger.dart';
-import 'package:dart_ping/dart_ping.dart';
+// import 'package:dart_ping/dart_ping.dart';
 import 'package:http/http.dart' as http;
 
 
@@ -87,14 +87,14 @@ class PersistentWebSocketManager {
     _cleanupSocket();
     initializeControllers();
 
-    final isLive = await isServerLive("http://localhost:8080/");
-    if (!isLive) {
-      logger.w("Server not running");
-      _connecting = false;
-      _connected = false;
-      _statusController!.add(ConnectionStatus.fail);
-      return;
-    }
+    // final isLive = await isServerLive("http://localhost:8080/");
+    // if (!isLive) {
+    //   logger.w("Server not running");
+    //   _connecting = false;
+    //   _connected = false;
+    //   _statusController!.add(ConnectionStatus.fail);
+    //   return;
+    // }
 
     logger.i("Attempting connection");
     if (_connecting || _connected) return; // Problem, on logout the status has not been updated
@@ -118,7 +118,7 @@ class PersistentWebSocketManager {
       );
       _connected = true; 
       _statusController!.add(ConnectionStatus.connected);
-      logger.i("Supposedly connected and emitted the connected signal");
+
       return;
     } catch (e) {
       logger.e("Exception occured while trying to connect to server: $e");

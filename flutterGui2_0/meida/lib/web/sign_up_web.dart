@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:meida/app_data.dart';
 import 'package:meida/components/misc.dart';
+import 'package:provider/provider.dart';
 
 class SignUpWeb extends StatefulWidget {
   const SignUpWeb({super.key});
@@ -34,8 +36,10 @@ class _SignUpWebState extends State<SignUpWeb> {
     Color color3Accent = Color.fromRGBO(145, 63, 123, 1);
     Color color4 = Color.fromRGBO(44, 44, 44, 1.0);
     Color color4Accent = Color.fromRGBO(61, 61, 61, 1);
+    var appState = context.watch<MyAppState>();
 
     return Scaffold(
+      
       // appBar: AppBar(
       //   elevation: 10.0,
       //   shadowColor: Colors.black,
@@ -73,7 +77,11 @@ class _SignUpWebState extends State<SignUpWeb> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(5.0),
               ),
-              onPressed: () {},
+              onPressed: () {
+                if (pswrdController.text == pConfController.text) {
+                  appState.signUp(uNameController.text, pConfController.text, emailController.text);
+                }
+              },
               child: Sans(text: "Submit", size: 17.0)
             ),
           ],
