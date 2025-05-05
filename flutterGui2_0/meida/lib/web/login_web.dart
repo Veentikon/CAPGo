@@ -72,30 +72,15 @@ class _LoginWebState extends State<LoginWeb> {
                       SizedBox(
                         height: 16,
                         width: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2.5,),
+                        child: CircularProgressIndicator(strokeWidth: 2.5, color: color1),
                       ),
                       SizedBox(width: 8),
-                      Sans(text: "Logging in...", size: 17.0),
+                      Sans(text: "Logging in", size: 17.0),
                     ],
                   )
                   : Sans(text: "Login", size: 17.0),
               )
             ),
-            // MaterialButton(
-            //   elevation: 20.0,
-            //   // color: color1,
-            //   color: color1b,
-            //   focusColor: color1Accent,
-            //   height: 50,
-            //   minWidth: 90,
-            //   shape: RoundedRectangleBorder(
-            //     borderRadius: BorderRadius.circular(5.0),
-            //   ),
-            //   onPressed: () {
-            //     appState.logIn(uNameController.text, pswrdController.text);
-            //   },
-            //   child: Sans(text: "Login", size: 17.0)
-            // ),
           ],
         ),
       ),

@@ -29,7 +29,7 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
   // Hadrcoded temporary credentials
   var currentUser = "";
 
-  var testUser = "admin";
+  var testUser = "";
   var testPassword = "password";
 
   late ServerConnController server;
@@ -141,11 +141,12 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
 
     if (testUser != "") {
       if (name==testUser && passwrd==testPassword) {
-        await Future.delayed(const Duration(seconds: 5));
+        await Future.delayed(const Duration(seconds: 1));
         isLoading = false;
         loggedIn = true;
         notifyListeners();
-        return "success";
+        currentUser = "123";
+        return "";
       } else {
         // return ConnectionState.fail;
         return "fail";

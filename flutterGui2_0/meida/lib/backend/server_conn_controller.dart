@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:uuid/uuid.dart';
 import 'package:logger/logger.dart';
+import 'package:dart_ping/dart_ping.dart';
+import 'package:http/http.dart' as http;
 
 
 final logger = Logger();
@@ -66,13 +68,34 @@ class PersistentWebSocketManager {
     }
   }
 
+  Future<bool> isServerLive(String url) async {
+    logger.i("Checking if server is running");
+    try {
+      // final uri = Uri.parse(url);
+      // final request = HttpClient().headeUrl(uri);
+      // final response = request.close();
+      // return response.then((r) => r.statusCose == 200).catchError((_) => false);
+
+      final response = await http.head(Uri.parse(url));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
 
   Future<void> connect() async { // Try to connect to server
     _cleanupSocket();
     initializeControllers();
-    // if (_statusController!.isClosed || _messageController!.isClosed) {
-    //   initializeControllers();
-    // }
+
+    final isLive = await isServerLive("http://localhost:8080/");
+    if (!isLive) {
+      logger.w("Server not running");
+      _connecting = false;
+      _connected = false;
+      _statusController!.add(ConnectionStatus.fail);
+      return;
+    }
+
     logger.i("Attempting connection");
     if (_connecting || _connected) return; // Problem, on logout the status has not been updated
     _connecting = true;
@@ -93,7 +116,7 @@ class PersistentWebSocketManager {
         onError: (_) => _handleError(),
         cancelOnError: true, // Cancel read if we receive error
       );
-      _connected = true;
+      _connected = true; 
       _statusController!.add(ConnectionStatus.connected);
       logger.i("Supposedly connected and emitted the connected signal");
       return;
