@@ -103,7 +103,7 @@ class _LoginPageState extends State<LoginPage> {
   final pswrdController = TextEditingController();
 
   // Visual control parameters
-  final inputWidth = 350.0;
+  final inputWidth = 300.0;
   final verticalSpacing = 20.0;
   final boxCornerRadius = 8.0;
 

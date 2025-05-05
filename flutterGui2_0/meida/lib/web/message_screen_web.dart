@@ -14,6 +14,13 @@ class MessageScreenWeb extends StatefulWidget {
 class _MessageScreenWebState extends State<MessageScreenWeb> {
   var rooms = <String>['0', '1', '2', '3', '4']; // These can be objects with room_id, etc.
   String? selectedRoom;
+  TextEditingController inputController = TextEditingController();
+
+  @override
+  void dispose(){
+    super.dispose();
+    inputController.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,31 +31,56 @@ class _MessageScreenWebState extends State<MessageScreenWeb> {
     }
 
     var appState = context.watch<MyAppState>();
+    // Visual control parameters
+    final inputWidth = 350.0;
+    final verticalSpacing = 20.0;
+    final boxCornerRadius = 8.0;
 
     return Scaffold(
       backgroundColor: Color.fromRGBO(61, 61, 61, 1),
       body: Row(
         children: [
           Expanded(
-            flex: 2,
-            child: ListView( // Display active chats / communications
-              padding: EdgeInsets.all(5.0),
+            child: Column(
               children: [
-                for (var chat in rooms)
-                  ListTile(
-                    leading: Icon(Icons.person),
-                    title: Text("Chat: $chat", style: TextStyle(color: Colors.white),),
-                    // title: Text("Chat: $chat",),
-                    selectedColor: Color.fromRGBO(230, 67, 86, 1),
-                    enabled: true,
-                    selected: selectedRoom == chat,
-                    onTap: () => {
-                      // selectedRoom = chat,
-                      setState(() {
-                        selectedRoom = chat;
-                      }),
-                    },
+                SizedBox(
+                  width: inputWidth,
+                  child: TextField(
+                    controller: inputController,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(boxCornerRadius),
+                      ),
+                      hintStyle: TextStyle(
+                      ),
+                      hintText: 'password',
+                    )
                   ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: ListView( // Display active chats / communications
+                    padding: EdgeInsets.all(5.0),
+                    children: [
+                      for (var chat in rooms)
+                        ListTile(
+                          leading: Icon(Icons.person),
+                          title: Text("Chat: $chat", style: TextStyle(color: Colors.white),),
+                          // title: Text("Chat: $chat",),
+                          selectedColor: Color.fromRGBO(230, 67, 86, 1),
+                          enabled: true,
+                          selected: selectedRoom == chat,
+                          onTap: () => {
+                            // selectedRoom = chat,
+                            setState(() {
+                              selectedRoom = chat;
+                            }),
+                          },
+                        ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
