@@ -136,9 +136,8 @@ class _TabsWebState extends State<TabsWeb> {
             // decorationColor: Colors.tealAccent,
             decorationColor: Color.fromRGBO(247, 55, 79, 1.0),
           ): 
-          GoogleFonts.oswald(color: Colors.black, fontSize:20.0 ),
-          child: Text(widget.title
-          ),
+          GoogleFonts.oswald(color: Colors.white, fontSize:20.0 ),
+          child: Text(widget.title,),
         ),
       ),
     );

@@ -37,29 +37,36 @@ class _MessageScreenWebState extends State<MessageScreenWeb> {
     final boxCornerRadius = 8.0;
 
     return Scaffold(
+      // backgroundColor: Color.fromRGBO(61, 61, 61, 1),
       backgroundColor: Color.fromRGBO(61, 61, 61, 1),
+      // backgroundColor: Color.fromRGBO(82, 37, 70, 1.0),
       body: Row(
         children: [
           Expanded(
+            flex: 2,
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                SizedBox(
-                  width: inputWidth,
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
                   child: TextField(
+                    canRequestFocus: true,
+                    // textInputAction: TextInputAction.newline,
                     controller: inputController,
-                    obscureText: true,
+                    maxLines: 3,
+                    minLines: 1,
+                    style: TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(boxCornerRadius),
-                      ),
-                      hintStyle: TextStyle(
-                      ),
-                      hintText: 'password',
-                    )
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(20.0)), borderSide: BorderSide(color: Color.fromRGBO(247, 55, 79, 1.0))),
+                      hintStyle: TextStyle(color: Colors.white),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(20.0)), borderSide: BorderSide(color: Color.fromRGBO(247, 55, 79, 1.0))),
+                      hintText: "Search ",
+                    ),
                   ),
                 ),
                 Expanded(
-                  flex: 2,
+                  // flex: 2,
                   child: ListView( // Display active chats / communications
                     padding: EdgeInsets.all(5.0),
                     children: [

@@ -220,7 +220,7 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
       isLoading = false;
 
       if (res == 0){
-        return "";
+        return "Success";
       } else {
         // errorMessage = "Sign up failed";
         notifyListeners();
@@ -230,6 +230,9 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
     } catch (e) {
       logger.w(e.toString());
       return "Sign up failed";
+    } finally {
+      isLoading = false;
+      notifyListeners();
     }
   }
 

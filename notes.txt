@@ -180,3 +180,10 @@ Update to message handling. Chatroom updats ------------------------------------
 Have top level message stream and message handler.
 Have separate streams for chatrooms so they only need to worry about one type of message.
 Separate concerns, make the system more modular and scalable. 
+
+
+Login -----------------------
+Ideally, when a user logs in only if the user has logged in on a given device before, there is user cache that has relevant user information.
+Such as icons, settings, and cached messages. However if I go by the most simple implementation first, each time a user logs in, the server
+will return all the information related to the user account along with some messages.
+
