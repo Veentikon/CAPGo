@@ -84,6 +84,12 @@ class PersistentWebSocketManager {
   }
 
   Future<void> connect() async { // Try to connect to server
+
+    // First test whether there is a connection already?
+    if (isConnected) {
+      return;
+    }
+
     _cleanupSocket();
     initializeControllers();
 
@@ -287,7 +293,7 @@ class ServerConnController {
     }
   }
 
-  Future<int> sendLogoutRequest(String userId) async {
+  Future<(int, String?)> sendLogoutRequest(String userId) async {
     var requestId = uuid.v4();
     var request = {
       "action": "logout",
@@ -301,21 +307,21 @@ class ServerConnController {
       if (response["type"] == "response") {
         if (response["status"] == "success") {
           logger.i("Logout successful!");
-          return 0;
+          return (0, null);
         } else if (response["status"] == "fail") {
           logger.w("Logout failed");
-          return -1;
+          return (-1, "Logout failed");
         }
       }
       logger.w("Uexpected response format $response");
-      return -1;
+      return (-1, "Unexpected server response, try again");
     } catch (error) {
-      logger.w("Sign up failed: $error");
-      return -1;
+      logger.w("Logout failed: $error");
+      return (-1, "Logout failed: $error");
     }
   }
 
-  Future<int> sendSignUpRequest(username, password, email) async { // Update to return the reason sign up failed (account exists, etc.)
+  Future<(int, String?)> sendSignUpRequest(username, password, email) async { // Update to return the reason sign up failed (account exists, etc.)
     var requestId = uuid.v4();
     var request = {
       "action": "sign_up",
@@ -331,49 +337,50 @@ class ServerConnController {
       if (response["type"] == "response") {
         if (response["status"] == 'success') {
           logger.i("Sign up successful!");
-          return 0;
+          return (0, null);
         } else if (response["status"] == "fail") {
           logger.i("Sign up failed: ${response["message"]}");
-          return -1;
+          return (-1, "Sign up failed: ${response["message"]}");
         } 
       }
       logger.w("Unexpected response format: $response");
-      return -1; // Fallback failure if the response type is unexpected
+      return (-1, "Unexpected server response, try again"); // Fallback failure if the response type is unexpected
     } catch (error) {
       logger.w("Sign up failed: $error");
-      return -1;
+      return (-1, "Sign up failed");
     }
   }
 
-  Future<int> sendGuestLoginRequest(username) async {
-    var requestId = uuid.v4();
-    var request = {
-      "action": "guest_login",
-      "request_id": requestId,
-      "data": {
-        "username": username
-      }
-    };
-    try {
-      var response = await sendRequest(requestId, request);
-      if (response["type"] == "response") {
-        if (response["status"] == "success") {
-          logger.i("Login successful!");
-          return 0;
-        } else if (response["status"] == "fail") {
-          logger.i("Login failed: ${response["message"]}");
-          return -1;
-        }
-      }
-      logger.w("Unexpected response type");
-      return -1;
-    } catch (error) {
-      logger.w("Error: $error");
-      return -1;
-    }
-  }
+  /// Guest account feature is put on hold, will implement it in the future once I have core functionalities working
+  // Future<int> sendGuestLoginRequest(username) async {
+  //   var requestId = uuid.v4();
+  //   var request = {
+  //     "action": "guest_login",
+  //     "request_id": requestId,
+  //     "data": {
+  //       "username": username
+  //     }
+  //   };
+  //   try {
+  //     var response = await sendRequest(requestId, request);
+  //     if (response["type"] == "response") {
+  //       if (response["status"] == "success") {
+  //         logger.i("Login successful!");
+  //         return 0;
+  //       } else if (response["status"] == "fail") {
+  //         logger.i("Login failed: ${response["message"]}");
+  //         return -1;
+  //       }
+  //     }
+  //     logger.w("Unexpected response type");
+  //     return -1;
+  //   } catch (error) {
+  //     logger.w("Error: $error");
+  //     return -1;
+  //   }
+  // }
 
-  Future<int> sendDirectMessageRequest(senderId, recipientId, message) async {
+  Future<(int, String?)> sendDirectMessageRequest(senderId, recipientId, message) async {
     var requestId = uuid.v4();
     var request = {
       "action": "guest_direct_message",
@@ -389,21 +396,21 @@ class ServerConnController {
       if (response["type"] == "response") {
         if (response["status"] == "success") {
           logger.i("Message send successfully");
-          return 0;
+          return (0, null);
         } else if (response["status"] == "fail") {
           logger.w("Message did not reach destinnation: ${response["message"]}");
-          return -1;
+          return (-1, "Message did not reach destination: ${response["message"]}");
         }
       }
       logger.w("Unexpected response format: $response");
-      return -1;
+      return (-1, "Received unexpected server response, try again");
     } catch (error) {
       logger.w("Error: $error");
-      return -1;
+      return (-1, "Error, $error");
     }
   }
 
-  Future<int> sendChatroomMessageRequest(senderId, roomId, message) async { // Need to know if successful?
+  Future<(int, String?)> sendChatroomMessageRequest(senderId, roomId, message) async { // Need to know if successful?
     var requestId = uuid.v4();
     var request = {
         "action": "send_room_message",
@@ -419,22 +426,22 @@ class ServerConnController {
       if (response["type"] == "response") {
         if (response["status"] == "success") {
           logger.i("Message sent successfully!");
-          return 0;
+          return (0, null);
         }
       } else if (response["status"] == "fail") {
         logger.w("Failed to deliver message: ${response["message"]}");
-        return -1;
+        return (-1, "Failed to deliver message");
       }
       logger.w("Unexpected response format: $response");
-      return -1;
+      return (-1, "Unexpected server response, please try again.");
     } catch (error) {
       logger.w("Error: $error");
-      return -1;
+      return (-1, "Error: $error");
     }
   }
 
   // Send request in non-blocking way from UI perspective, get and process server response
-  Future<int> sendJoinRoomRequest(roomId, userId) {
+  Future<(int, String?)> sendJoinRoomRequest(roomId, userId) async {
     var requestId = uuid.v4();
     var request = {
       "action": "join_room",
@@ -445,21 +452,23 @@ class ServerConnController {
       },
     };
     
-    return sendRequest(requestId, request).then((response) {
+    // return sendRequest(requestId, request).then((response) {
+    try {
+      var response = await sendRequest(requestId, request);
       if (response["type"] == "response" && response["status"] == "success") {
         logger.i("Successfully joined the room!");
-        return 0;
+        return (0, null);
       } else {
         logger.i("Failed to join the room: ${response["message"]}");
-        return -1;
+        return (-1, "Failed to join the room: ${response["message"]}");
       }
-    }).catchError((error) {
+    } catch(error) {
       logger.w("Error joining room: $error");
-      return -1;
-    });
+      return (-1, "Error joining room: $error");
+    }
   }
 
-  Future<int> sendGetMessagesRequest(roomId, limit) {
+  Future<(int, String?)> sendGetMessagesRequest(roomId, limit) async {
     var requestId = uuid.v4();
     var request = {
       "action": "get_messages",
@@ -469,21 +478,22 @@ class ServerConnController {
         "limit": limit,
       }
     };
-    return sendRequest(requestId, request).then((response) {
+    try {
+      var response = await sendRequest(requestId, request);
       if (response["type"] == "response" && response["status"] == "success") {
         logger.i("Message delivered!");
-        return 0;
+        return (0, null);
       } else {
         logger.w("Message not delivered: ${response["message"]}");
-        return -1;
+        return (-1, "Message not deliverd ${response["message"]}");
       }
-    }).catchError((error) {
+    } catch (error) {
       logger.w("Error sending message: $error");
-      return -1;
-    });
+      return (-1, "Error sending message: $error");
+    }
   }
 
-  Future<int> sendLeaveRoomRequest(userId, roomId) {
+  Future<(int, String?)> sendLeaveRoomRequest(userId, roomId) async {
     var requestId = uuid.v4();
     var request = {
       "action": "leave_room",
@@ -493,17 +503,43 @@ class ServerConnController {
         "room_id": roomId,
       }
     };
-    return sendRequest(requestId, request).then((response) {
+    try {
+      var response = await sendRequest(requestId, request);
       if (response["type"] == "response" && response["status"] == "success") {
         logger.i("Successfully left the room!");
-        return 0;
+        return (0, null);
       } else {
         logger.w("Failed to leave the room: ${response["message"]}");
-        return -1;
+        return (-1, "Failed to leave the room ${response["message"]}");
       }
-    }).catchError((error) {
+    } catch (error) {
       logger.w("Error leaving room: $error");
-      return -1;
-    });
+      return (-1, "Error leaving rooom: $error");
+    }
   }
+
+  /// This is left here for reference purposes
+  // Future<int> sendLeaveRoomRequest(userId, roomId) {
+  //   var requestId = uuid.v4();
+  //   var request = {
+  //     "action": "leave_room",
+  //     "request_id": requestId,
+  //     "data": {
+  //       "user_id": userId,
+  //       "room_id": roomId,
+  //     }
+  //   };
+  //   return sendRequest(requestId, request).then((response) {
+  //     if (response["type"] == "response" && response["status"] == "success") {
+  //       logger.i("Successfully left the room!");
+  //       return 0;
+  //     } else {
+  //       logger.w("Failed to leave the room: ${response["message"]}");
+  //       return -1;
+  //     }
+  //   }).catchError((error) {
+  //     logger.w("Error leaving room: $error");
+  //     return -1;
+  //   });
+  // }
 }

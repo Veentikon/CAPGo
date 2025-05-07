@@ -102,7 +102,7 @@ class _SignUpWebState extends State<SignUpWeb> {
                       Sans(text: "Loading", size: 17.0),
                     ],
                   )
-                  : Sans(text: "Loading", size: 17.0),
+                  : Sans(text: "Sign up", size: 17.0),
               )
             ),
           ],

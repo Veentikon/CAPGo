@@ -210,12 +210,29 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
 
   Future<String> signUp(String name, String passwrd, String email) async { // Refactor function and its dependants
     if (isLoading) return "A related task is working, cannot login";
-    socketManager.connect();
 
     isLoading = true;
     notifyListeners();
 
     try {
+      await socketManager.connect();
+      if (!socketManager.isConnected) {
+        // Wait for either a successful or failed connection (in case there is a delay)
+        final status = await socketManager.onStatusChange
+          .firstWhere((s) =>
+              s == ConnectionStatus.connected || s == ConnectionStatus.fail)
+          .timeout(const Duration(seconds: 10), onTimeout: () {
+            logger.w("Connection timed out.");
+            return ConnectionStatus.fail;
+          });
+
+        if (status != ConnectionStatus.connected) {
+          isLoading = false;
+          notifyListeners(); // The UI must know that the connection failed
+          return "Server is unreachable.";
+        }
+      }
+
       int res = await server.sendSignUpRequest(name, passwrd, email); // Send login request to the server, How do I wait for response?
       isLoading = false;
 
@@ -238,16 +255,9 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
 
   // Logout both, user and guest
   void logOut() {
-    // Temporary implementation
-    // loggedIn = false;
-    // // print(loggedIn);
-    // notifyListeners();
-    // return "logged in";
 
     isLoading = true;
     loggedIn = false;
-    // loggedInAsUser = false;
-    // loggedInAsGuest = false;
     server.sendLogoutRequest(currentUser); // We are not going to wait for response
 
     // saveChatData(currentUser, _chats.values.toList()); // Convert Map<String ChatData> to List<ChatData>

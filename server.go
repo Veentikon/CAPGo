@@ -128,7 +128,7 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 				resp := ServerResponse{"response", "success", request.RequestId, "", json.RawMessage{}}
 				ws.WriteJSON(resp)
 				time.Sleep(50 * time.Millisecond) // Wait a little to make sure the message reaches the client
-				fmt.Println("Closing the connection")
+				fmt.Println(username, "logged out closing connection")
 				// ws.Close() // not needed since we have defer ws.Close() call
 				cancel() // Stop the goroutine
 

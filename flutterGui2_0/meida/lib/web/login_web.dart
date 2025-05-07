@@ -77,7 +77,7 @@ class _LoginWebState extends State<LoginWeb> {
                         child: CircularProgressIndicator(strokeWidth: 2.5, color: color1),
                       ),
                       SizedBox(width: 8),
-                      Sans(text: "Logging in", size: 17.0),
+                      Sans(text: "Loading", size: 17.0),
                     ],
                   )
                   : Sans(text: "Login", size: 17.0),
