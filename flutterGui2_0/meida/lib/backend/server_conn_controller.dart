@@ -230,11 +230,20 @@ class ServerConnController {
     }
   }
 
-  Future<Map<String, dynamic>> sendRequest(String requestId, Map<String, dynamic> request) {
+  // Future<Map<String, dynamic>> sendRequest(String requestId, Map<String, dynamic> request) {
+  //   Completer<Map<String, dynamic>> completer = Completer();
+  //   pendingRequests[requestId] = completer;
+  //   _ws?.send(jsonEncode(request));
+  //   return completer.future;
+  // }
+  Future<Map<String, dynamic>> sendRequest(String requestId, Map<String, dynamic> request, {Duration timeout = const Duration(seconds: 10)}) {
     Completer<Map<String, dynamic>> completer = Completer();
     pendingRequests[requestId] = completer;
     _ws?.send(jsonEncode(request));
-    return completer.future;
+    return completer.future.timeout(timeout, onTimeout: () {
+      pendingRequests.remove(requestId);
+      throw TimeoutException("Request $requestId timed out");
+    });
   }
 
   /* Process unsolicited, server initiated messages */
