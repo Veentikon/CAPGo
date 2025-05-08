@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 
 
 final logger = Logger();
+Map<String, Completer> _pendingRequests = {}; // For now at least isolate it to this file
 
 
 /// Manage connetion to server.
@@ -157,6 +158,7 @@ class PersistentWebSocketManager {
     // If this method is called, it means the first reconnect should be schaduled and the reconnects count is reset
     _statusController!.add(ConnectionStatus.disconnected);
     _subscription?.cancel(); // Cancel previous subscription so that it does not hang
+
     try {
       await _channel?.sink.close(); // close previous channel to free up the resources
     } catch (e) {
@@ -193,6 +195,12 @@ class PersistentWebSocketManager {
     _subscription = null;
     _channel?.sink.close();
     _channel = null;
+
+    // Clear pending requests to avoid them hanging forever
+    for (var completer in _pendingRequests.values) {
+      completer.completeError("Connection lost before response");
+    }
+    _pendingRequests.clear();
   }
 
   // void disconnect() {
@@ -230,7 +238,7 @@ class PersistentWebSocketManager {
 
 class ServerConnController {
   final PersistentWebSocketManager? _ws;
-  Map<String, Completer> pendingRequests = {};
+  // Map<String, Completer> pendingRequests = {}; // Moved initialization to global scope
 
   final uuid = Uuid(); // Unique Id generator
   // WebSocketChannel? get channel => _channel;
@@ -242,9 +250,9 @@ class ServerConnController {
   void _handleMessage(String response) {
     final decoded = jsonDecode(response);
     final requestId = decoded['request_id'];
-    if (pendingRequests.containsKey(requestId)) {
-      pendingRequests[requestId]!.complete(decoded);
-      pendingRequests.remove(requestId);
+    if (_pendingRequests.containsKey(requestId)) {
+      _pendingRequests[requestId]!.complete(decoded);
+      _pendingRequests.remove(requestId);
     } else {
       handleNotification(decoded);
     }
@@ -258,10 +266,10 @@ class ServerConnController {
   // }
   Future<Map<String, dynamic>> sendRequest(String requestId, Map<String, dynamic> request, {Duration timeout = const Duration(seconds: 10)}) {
     Completer<Map<String, dynamic>> completer = Completer();
-    pendingRequests[requestId] = completer;
+    _pendingRequests[requestId] = completer;
     _ws?.send(jsonEncode(request));
     return completer.future.timeout(timeout, onTimeout: () {
-      pendingRequests.remove(requestId);
+      _pendingRequests.remove(requestId);
       throw TimeoutException("Request $requestId timed out");
     });
   }
@@ -272,18 +280,18 @@ class ServerConnController {
     String requestId = decodedMessage['request_id'] ?? '';
 
     if (type == 'response') {
-      if (pendingRequests.containsKey(requestId)) {
-        pendingRequests[requestId]!.complete(decodedMessage); // Completes the Future
-        pendingRequests.remove(requestId);
+      if (_pendingRequests.containsKey(requestId)) {
+        _pendingRequests[requestId]!.complete(decodedMessage); // Completes the Future
+        _pendingRequests.remove(requestId);
       }
     } else if (type == 'new_message') {
       // Process a broadcast message or something unrelated to a specific request
       logger.i("New message: ${decodedMessage['content']}");
       // Update application state here
     } else if (type == 'error') {
-      if (pendingRequests.containsKey(requestId)) {
-        pendingRequests[requestId]!.completeError(decodedMessage['error']);
-        pendingRequests.remove(requestId);
+      if (_pendingRequests.containsKey(requestId)) {
+        _pendingRequests[requestId]!.completeError(decodedMessage['error']);
+        _pendingRequests.remove(requestId);
       }
     } else {
       logger.w("Unhandled notification type: $type");
