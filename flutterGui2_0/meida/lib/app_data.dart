@@ -178,21 +178,15 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
       // Attempt login via server
       var (res, id) = await server.sendLoginRequest(name, passwrd); // This is where the second login gets stuck
       logger.i("Login request sent, response code: $res, user id: $id");
-      // if (res == 0) {
-      //   loggedIn = true;
-      //   return "success";
-      // } else {
-      //   return "fail";
-      // }
 
       if (res == 0) {
         loggedIn = true;
         currentUser = id!;
         // _initializeChats(); // Load cached messages
         return "success";
-      } else {
-        logger.i("Login failed with server response: $res");
-        return "Invalid username or password.";
+      } else if (res == -1) {
+        logger.i("$id");
+        return "$id!"; // Am I sure this value is not null? yes, in case of error the server returns the error message in message field instead of id.
       }
 
     } catch (e) {
@@ -206,6 +200,7 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
       isLoading = false;
       notifyListeners();
     }
+    return "Unexpected fail";
   }
 
   Future<String> signUp(String name, String passwrd, String email) async { // Refactor function and its dependants
@@ -233,7 +228,7 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
         }
       }
 
-      int res = await server.sendSignUpRequest(name, passwrd, email); // Send login request to the server, How do I wait for response?
+      var (res, msg) = await server.sendSignUpRequest(name, passwrd, email); // Send login request to the server, How do I wait for response?
       isLoading = false;
 
       if (res == 0){
@@ -242,10 +237,10 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
         // errorMessage = "Sign up failed";
         notifyListeners();
         logger.i("Sign up failed");
-        return "Sign up failed";
+        return "$msg";
       }
     } catch (e) {
-      logger.w(e.toString());
+      logger.w(e.toString()); // In this case the source of error needs to be logged but may not be reported to the user
       return "Sign up failed";
     } finally {
       isLoading = false;

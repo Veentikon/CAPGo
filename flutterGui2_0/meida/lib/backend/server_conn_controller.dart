@@ -282,14 +282,14 @@ class ServerConnController {
           return (0, response["message"] as String);
         } else if (response["status"] == "fail") {
           logger.i("Login failed: ${response["message"]}");
-          return (-1, null);
+          return (-1, response["message"] as String?);
         }
       }
       logger.w("Unexpected response format: $response");
       return (-1, null); // Fallback failure if the response type is unexpected
     } catch (error) {
       logger.w("Login failed $error");
-      return (-1, null); // Failure due to exception (e.g., network error)
+      return (-1, "$error"); // Failure due to exception (e.g., network error)
     }
   }
 
@@ -340,14 +340,14 @@ class ServerConnController {
           return (0, null);
         } else if (response["status"] == "fail") {
           logger.i("Sign up failed: ${response["message"]}");
-          return (-1, "Sign up failed: ${response["message"]}");
+          return (-1, response["message"] as String?);
         } 
       }
       logger.w("Unexpected response format: $response");
       return (-1, "Unexpected server response, try again"); // Fallback failure if the response type is unexpected
     } catch (error) {
       logger.w("Sign up failed: $error");
-      return (-1, "Sign up failed");
+      return (-1, "Error");
     }
   }
 

@@ -104,7 +104,7 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 				user_id, err := GetUserDB(loginReq.Username, loginReq.Password) //
 				if err != nil {
 					fmt.Println(fmt.Errorf("login error: %v", err)) // ==============================
-					jResp := ServerResponse{"response", "fail", request.RequestId, "error, invalid request", nil}
+					jResp := ServerResponse{"response", "fail", request.RequestId, err.Error(), nil}
 					if err := ws.WriteJSON(jResp); err != nil {
 						fmt.Println("Failed to send response: ", err.Error())
 					}
@@ -138,7 +138,8 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 				exists, err := UserExistsDB(signReq.Username)
 				if exists {
 					fmt.Println(fmt.Errorf("sign-up error: %v", err))
-					resp := ServerResponse{"response", "fail", request.RequestId, fmt.Sprintf(`{"error": "%s"}`, err.Error()), nil}
+					// resp := ServerResponse{"response", "fail", request.RequestId, fmt.Sprintf(`{"error": "%s"}`, err.Error()), nil}
+					resp := ServerResponse{"response", "fail", request.RequestId, err.Error(), nil}
 					if err := ws.WriteJSON(resp); err != nil {
 						fmt.Println("Failed to send response: ", err.Error())
 					}
@@ -147,7 +148,8 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 				err = NewUserDB(signReq.Username, signReq.Password, signReq.Email) // Send create new user request to database
 				if err != nil {
 					fmt.Println(fmt.Errorf("sign-up error: %v", err))
-					resp := ServerResponse{"response", "fail", request.RequestId, fmt.Sprintf(`{"error": "%s"}`, err.Error()), nil}
+					// resp := ServerResponse{"response", "fail", request.RequestId, fmt.Sprintf(`{"error": "%s"}`, err.Error()), nil}
+					resp := ServerResponse{"response", "fail", request.RequestId, err.Error(), nil}
 					if err := ws.WriteJSON(resp); err != nil {
 						fmt.Println("Failed to send response: ", err.Error())
 					}
