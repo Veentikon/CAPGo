@@ -37,9 +37,11 @@ class PersistentWebSocketManager {
 
   final Duration reconnectDelay;
   final int reconnectLimit;
+
   int _reconnects = 0;
   bool _connecting = false;
   bool _connected = false;
+  bool _shouldReconnect = true;
 
   WebSocketChannel? _channel;
   StreamSubscription? _subscription;
@@ -159,7 +161,7 @@ class PersistentWebSocketManager {
     _reconnects = 0; // First reconnect, reset the counter
     _connected = false;
     _connecting = false;
-    while (!_connected && _reconnects < reconnectLimit) {
+    while (!_connected && _reconnects < reconnectLimit && _shouldReconnect) {
       // _statusController.add(ConnectionStatus.disconnected);
       // Future.delayed(reconnectDelay, connect); // Delay reconnection
       await connect();
@@ -189,15 +191,29 @@ class PersistentWebSocketManager {
     _channel = null;
   }
 
-  void disconnect() {
-    logger.i("Client disconnected.");
-    // _subscription?.cancel();
-    // _channel?.sink.close();
+  // void disconnect() {
+  //   logger.i("Client disconnected.");
+  //   // _subscription?.cancel();
+  //   // _channel?.sink.close();
+  //   _cleanupSocket();
+  //   _statusController!.add(ConnectionStatus.disconnected);
+  //   _connecting = false;
+  //   _connected = false;
+  // }
+  void disconnect({bool force = false}) {
+    _shouldReconnect = !force;
+    logger.i("Client disconnected${force ? " (forced)" : ""}.");
     _cleanupSocket();
     _statusController!.add(ConnectionStatus.disconnected);
     _connecting = false;
     _connected = false;
+
+    if (force) {
+      _reconnects = 0;
+      // Optionally cancel timers or clean up pending reconnects
+    }
   }
+
 
   void dispose() {
     disconnect();
