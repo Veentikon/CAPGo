@@ -157,7 +157,11 @@ class PersistentWebSocketManager {
     // If this method is called, it means the first reconnect should be schaduled and the reconnects count is reset
     _statusController!.add(ConnectionStatus.disconnected);
     _subscription?.cancel(); // Cancel previous subscription so that it does not hang
-    _channel?.sink.close(); // close previous channel to free up the resources
+    try {
+      await _channel?.sink.close(); // close previous channel to free up the resources
+    } catch (e) {
+      logger.w("Attempted to close an already closed socket");
+    }
     _reconnects = 0; // First reconnect, reset the counter
     _connected = false;
     _connecting = false;
