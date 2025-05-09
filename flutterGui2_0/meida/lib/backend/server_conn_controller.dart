@@ -96,7 +96,7 @@ class PersistentWebSocketManager {
     _cleanupSocket();
     initializeControllers();
 
-    // final isLive = await isServerLive("http://localhost:8080/");
+    // final isLive = await isServerLive("http://172.18.0.1:8080/health");
     // if (!isLive) {
     //   logger.w("Server not running");
     //   _connecting = false;
