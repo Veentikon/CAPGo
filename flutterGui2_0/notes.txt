@@ -1,0 +1,3 @@
+This folder contains a new version of my GUI flutter application.
+I decided to redo it due to accumulated errors as well as for practice and learning.
+The general idea will remain mostly the same.

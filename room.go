@@ -1,26 +1,27 @@
 package main
 
 import (
-	"fmt"
-	"net"
+	"encoding/json"
 	"sync"
+
+	"github.com/gorilla/websocket"
 )
 
 // Structures and methods to handle real-time messaging #################################################
 type Message struct {
-	sender net.Conn // Connection the message originates from, need to change to username instead.
-	text   string   // The message
+	sender *websocket.Conn // Connection the message originates from, need to change to username instead.
+	text   SendMessage     // The message
 }
 
 type Room struct {
-	members   map[net.Conn]bool // Dict of subscribers to the room
-	broadcast chan Message      // A buffer of messages
+	members   map[*websocket.Conn]bool // Dict of subscribers to the room
+	broadcast chan Message             // A buffer of messages
 	mu        sync.Mutex
 }
 
 func NewRoom() *Room {
 	room := &Room{
-		members:   make(map[net.Conn]bool),
+		members:   make(map[*websocket.Conn]bool),
 		broadcast: make(chan Message),
 	}
 	go room.startBroadcast() // Start listening for messages
@@ -30,31 +31,32 @@ func NewRoom() *Room {
 func (r *Room) startBroadcast() {
 	for msg := range r.broadcast { // Blocking call, waits for messages
 		r.mu.Lock()
-		for conn := range r.members {
-			if conn != msg.sender { // Don't send to the sender
+		for ws := range r.members {
+			if ws != msg.sender { // Don't send to the sender (compare by reference)
 				// fmt.Fprintf(conn, "%s\n", msg.text)
-				fmt.Println(msg.text)
+				// fmt.Println(msg.text)
 				// fmt.Println(conn)
-				conn.Write([]byte(msg.text + "\n"))
+				// Send message in the form of Json along with room_id
+				resp, _ := json.Marshal(msg.text)
+				ws.WriteJSON(ServerResponse{"message", "receive", "", "", resp})
 			}
 		}
 		r.mu.Unlock()
 	}
 }
 
-func (r *Room) Join(conn net.Conn) {
+func (r *Room) Join(ws *websocket.Conn) {
 	r.mu.Lock()
-	r.members[conn] = true
+	r.members[ws] = true
 	r.mu.Unlock()
 }
 
-func (r *Room) Leave(conn net.Conn) {
+func (r *Room) Leave(ws *websocket.Conn) {
 	r.mu.Lock()
-	delete(r.members, conn)
+	delete(r.members, ws)
 	r.mu.Unlock()
-	//r.mu.Close()
 }
 
-func (r *Room) SendMessage(sender net.Conn, text string) {
-	r.broadcast <- Message{sender: sender, text: text} // Send message to broadcast channel
+func (r *Room) SendMessage(room_id string, sender_id, sender string, senderConn *websocket.Conn, text string) {
+	r.broadcast <- Message{sender: senderConn, text: SendMessage{room_id, sender_id, sender, text}} // Send message to broadcast channel
 }

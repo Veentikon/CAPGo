@@ -1,0 +1,189 @@
+Tech Stack ------------------------------------------------------------------------------------
+golang server - accept and handle client connections via TCP - Updated to WebSockets
+Dart, Flutter - cross-platform Backend - First develop for Windows, then later build for other platforms
+Redis - online users tracking, real-time messaging
+PostgreSQL - Long term data storage
+Queue struct - Short memory, unrecoverable messages
+TLS over TCP - communication encryption
+bcrypt - hashed password storage with salt
+Json - client-server format message/request exchang
+server concurrency - daemon listeners, client socket connection handler routines
+client async and concurrency - Future, async, await, Completer
+Docker - dev and test environment, set up server, PostgreSQL, Redis containers that are ready for deployment.
+Python - Initial CLI client program.
+
+Simple overview -------------------------------------------------------------------------------
+Backend server:
+Server written in Golang, great for backend with its concurrency.
+Server listens on port, accepts connections with http then upgrades to Websockets after which it spawns a go routine connection handler
+that handles the rest of the communication with the client.
+Handler reads Json messages and processes them based on a type of request.
+DB: a PostgreSQL database
+Long term storage for user accounts, chatrooms with subscribers, and messages. 
+Messages and passwords should be stored encrypted. Server does not deal with unencrypted user messages. Passwords are solted and hashed with bcrypt.
+Redis: Facilitate real-time messaging
+Before using Redis, real-time messaging was achieved through handling Room structs with subscribers in the form of socket connections.
+When a message is added to a Room, the goroutine listening on that room automatically broadcasts the message to subscribers.
+It was simple but effective way to do it, however, it is not very scalable.
+Instead, Redis server keeps track of online users and handles real-time messaging. Important to note, clients have no access to Redis 
+directly, communication is stil done through the server.
+GUI: Flutter
+Before using Flutter it was a simple CLI with repl loop written in python which quickly became obsolete because it could not handle 
+more complex requests, responses from server, such as asynchronous calls, loading of messages, etc.
+The GUI was inspired from othe messenger platforms such as instagram messenger and Telegram. This makes sure that the user is presented
+with a familiar UI that is familiar and intuitive.
+
+
+Problems / Challenges ---------------------------------------------------------------------------
+Scalability, maintainability, reliability, security
+Handling multi-user environement
+Connection interrupts and error handling
+cache
+Choosing connection protocols / types (HTTP, TCP, WebSockets)
+Concurrency - Accepting and handling connections from multiple concurrent users
+Security Concerns: DoS, DDoS, encryption, secure storage, server and database configurations.
+Choosing hosting platform / provider (GCP, AWS, CloudFlare, etc.)
+GUI routing stack based routing not flexible enough, hard to manage with more complex strcuture.
+What happens on data corruption? - IDK, this is the problem I have no solution for yet ===============================================
+Should you compress the chat history files? - Might not be necessary with how much data is actually stored
+Will you limit how much history is cached? (e.g. max X messages per chat?) - Yes limit to 20 for example
+
+
+Specific problems and solutions -----------------------------------------------------------------
+How to ensure the client has the ID of chatroom they joined?
+    Return user Id once they log in.
+Should I implement proper db messaging first?
+    Not necessary, can have local messaging on server first.
+CLI is no longer sufficient, need proper GUI
+    create the most basic Flutter application
+In what format to store, pass and use ids?
+    Store in integer format in DB (most efficient for DB handling), but use as a string everywhere else.
+How to properly handle disconnects, for example, when user logs out, the connection is closed but server is
+still trying to continuously read from the closed connection. Need to keep track of active connections.
+When to initiate server connection?
+    Exactly when it is needed, so delay until the client sends request, for example, just before login.
+    Avoid idle connection if the client is not actively using the application.
+How to prevent users from spammin buttons/links that trigger server requests?
+    Show some sort of progress bar or loading screen and disable the button / link temporarily.
+    The Loading indicator will replace the button effectively disabling it.
+    Another option is to create a widget that darkens the whole screen and shows a loading animation.
+
+
+Design decisions around cache and multi-user environment handling -------------------------------
+What is cache:
+In the simplest terms it is data stored on disk for quick, offline retreaval.
+In the case of the chatroom application I decided to roll with Serializing JSON using code generation library: json_serializable
+Adding it to project simply follow steps documented here: https://docs.flutter.dev/data-and-backend/serialization/json#code-generation
+The ChatMetaData and ChatData objecs (along with messages and participants in the chats) are coverted to JSON format and stored in a file.
+Now, here comes another problem, what happens when another user logs in, do we erase the previous cache and create new cache for new user?
+It is simple, but if the users change often, it defeats the purpose of the cache, fast load and offline support because relevant informaiton
+about chats would have to be loaded from the server which can cause delays and degrade user experience. Naturally, it could be best to create
+cache per user. From this another problem arises, the cache authorization and availability, users must only have access to their own cache.
+Therefore we need encryption, and the first intuition is to use passphrase encryption keys to encrypt each cache, then when user logs in,
+their cache is automatically decrypted and ready to be read.
+What do we do with encryption keys, IVs, salts, etc?, this is the problem I will solve and implement the solution once I have a frame for 
+unencrypted, multi-user cache.
+When to store new messages to cache? - logout, (messages are cached all at the same time, not one by one)
+
+
+Encrypted client server communication -----------------------------------------------------------
+Client and server communicate through secure websockets, which requires certificates. This requires certificates, at least initially
+the type of certificate used will be self-signed certificate.
+
+Authenticaiton and client-server messaging ------------------------------------------------------
+In order for server to be able to compare password user provided with the stored solted hashed password, it needs to receive password
+as is, unhashed. Durin authenticaiton, server retrieves hashed password and salt from the db, hashes the password received from client
+with the same salt, and compares them.
+Note, the passowrd is not passed in plaintext, but is encrypted along with the client request. There is no hashing before sending password, 
+or separate password encryption on top.
+
+GUI backend request response handling. -----------------------------------------------------------
+Each request is identified by unique, uuid v4. When a request is sent, its Future along with a Completer is stored in a map where key is the id.
+When server responds to a request, it returns the id. A daemon listens for server messages and processes them, if it is a response type of message
+it checks the pending requests, when the match is found it is completed and GUI is notified and updated if necessary.
+
+
+Dev. conclusions:
+I heard some opinions from other developers saying something along the lines that overengineering is bad and 
+"early optimization is the root of all evel" (It is tempting though). However as I am working on this application 
+I understand those points of view more and more, sometimes "good enough" is the best option and early attempts at 
+optimization early on can cause delays later, since you never know for sure whether the optimization you did was 
+necessary, for all you know, the whole code you optimized might not be needed at all.
+
+You might end up optimizing for a use case that never happens.
+Refactoring something that was "clever" but unnecessary can take more time later.
+And worst: you might be optimizing code that will eventually be deleted or rewritten.
+
+More complex architecture = more logic = more room for bugs. Simpler designs:
+Are easier to test,
+Easier to maintain,
+And easier to scrap or pivot from.
+
+
+Handling client disconnects ------------------------------------------
+Upon sudden, unplanned client disconnect connection handler goroutine goes into infinite loop of reading from closed
+connection. Initially I sort of fixed the issue by defining isLogged in boolean condition to use in for loop, as well
+as ctx (context.Context and context.CloseFunc) that would allow graceful termination of the goroutine when the Client
+disconnects. There would be a condition that first checks the status of the connection before attempting to read from it,
+if connection is not alive, the go routine would self terminate using the before mentioned cancel() function.
+Interestingly enough, the error happened again during testing despite the implemented precasiouns, this needs further
+investiongation, and should be prioritized. ...
+This happened after incorrect password was entered and client disconnected.
++++ Implemented Websocket manager utility to reconnect automatically with the server if the connection is lost. Helpful feature
+is to limit number of automatic reconnect attempts, say, keep count of reconnects. It could be reset to zero if the client
+attempts to perform an action that requires a connection. The issue stemmed from not updating a connection in progress status
+which caused the reconnect to hang and freeze the whole program.
+
+
+Handling login / connection attempts to server that is not running --
+Ideally there should be a timeout on a connection attempt that would return the reason.
+While trying to implement the loading screen feature to prevent users from spamming login button, I found an issue where
+the connection_handler would return connection success when the server was not running. This results in trying to send a
+login request to a closed connection which throws an exception that. During all this time the app is left hanging in loading
+state instead of timeout working and a snackbar displaying error message to the user.
+
+After setting breakpoint and stepping through the connect() code I observed that the WebSocketChannel.connect(endpoint) never
+threw any exception, instead it sets up the connection under the hood. This happens because I connected the socket to stream
+and when the error happens, it is supposed to be accepted via onError stream callback. I expected an exception thrown there
+hence on successful execution of connect line I set _connected status to true and send it a connected status on stateStream.
+The UI reads that the connection was successful and attempts to send login request using the provided stream, which results
+in an unhandled exception somewhere along the way. In the meantime the UI freezes.
+There are several ways to deal with this situation, first, is move connect status to later when either a message was successfully
+sent or received from server or someplace where we truly are confident that the connection was made.
+Another is to control the connection process on lower level, tcp, that would return the actuall error/exception we could deal on
+time, but it results in more boilerplate.
+The solution I went with is to create error handler function and link it to the stream. Currently any error on the WebSocketChannel
+stream is assumed to mean that the socket connection is dead so a fail signal is emitted on stateChannel. This seems to work
+for now but a deeper dive into the error handling of WebSocketChannel is required since I am not sure my initial assumption is
+correct.
+Another problem arose when connecting to live server, on login attempt, while the server accepted and confirmed the connection,
+the client login attempt timed out. The suspected reason is the login took less time (because it is run on local machine) than
+the time it took to subscribe and listen on StateController stream, hence it never received the Status update through stream.
+The fix is to first check the connected state before listening on stream with timeout, if connected we skip the stream.
+THE FIX WORKED 
+Now another issue arose from that, on logaout the stream is canceled, when we try to log in again it has not been reinitialized
+leading to "Unable to write to closed stream" kind of error. There are two options, keep the old stream, but that can lead to 
+memory leaks and some other issues. The other is to initialize the streams on every connect() call. This ensures safe behavior
+especially for long-lived app sessions. I decided to reinitialize the streams every time a connect() is called. However that 
+resulted in decoupling of ServerController from message stream, since we reinitialize the stream and the initial subscription
+is made in the constructor of ServerController, the message handler never receives responses from server.
+I decided to avoid early optimization through coupling of two classes etc. and instead make the subscription / stream persistant
+and not reset it.
+Simlarly, if the close() is called on a stream, while reference to it is still alive in ServerController, nothing can be written
+to it. On second login, after logout calls dispose() that closes the message stream, the applicaiton is stuck in infinite
+microtaskLoop that tries to reschedule task of writing/reading from closed stream. In order to keep it message controller stream
+truly persistent I removed the close(), and am planning to implement a more elegant approach and error handling later, avoiding
+early optimization.
+
+
+Update to message handling. Chatroom updats ------------------------------------
+Have top level message stream and message handler.
+Have separate streams for chatrooms so they only need to worry about one type of message.
+Separate concerns, make the system more modular and scalable. 
+
+
+Login -----------------------
+Ideally, when a user logs in only if the user has logged in on a given device before, there is user cache that has relevant user information.
+Such as icons, settings, and cached messages. However if I go by the most simple implementation first, each time a user logs in, the server
+will return all the information related to the user account along with some messages.
+

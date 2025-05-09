@@ -1,167 +1,317 @@
 package main
 
 import (
-	"bufio"
+	"context"
+	"encoding/json"
 	"fmt"
-	"strings"
-
+	"io"
 	"log"
-	"net"
-	// "encoding/json"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
 	// "sync"
 	// "crypto/tls"
 )
 
-// Connection handler
-func handleConnection(conn net.Conn, chats map[string]*Queue, rooms map[string]*Room) {
-	current_room := "" // In the future users are able to connect to multiple rooms thus making this abolete
-	username := ""     // Similarly to room, this might not be needed once I implement proper account management
+type Server struct {
+	conns map[string]*websocket.Conn
+	rooms map[string]*Room
+	mu    sync.RWMutex
+}
 
-	defer conn.Close()
-
-	logged_in := false
-
-	// Authenticate/sign-up the user
-	for !logged_in {
-		// Listen for credentials
-		credentials, err := bufio.NewReader(conn).ReadString('\n')
-		if err != nil {
-			log.Fatal(err)
-		}
-		credentials = strings.Replace(credentials, "\n", "", -1)
-		msgSplit := strings.Split(credentials, " ")
-
-		if msgSplit[0] == "login" {
-			// Perform login, send response, and break out of the loop
-			err = GetUser(msgSplit[1], msgSplit[2])
-			if err != nil { // In case authenticaiton fails, send response to the user and restart the authentication loop
-				conn.Write([]byte(err.Error()))
-				continue
-			}
-
-			logged_in = true
-			username = msgSplit[1]
-			conn.Write([]byte("Ok"))
-			break
-
-		} else if msgSplit[0] == "sign-up" {
-			// Perform sign-up and send response (User will need to login)
-			err := UserExists(msgSplit[1])
-			if err != nil {
-				conn.Write([]byte(err.Error()))
-				continue
-			}
-			err = NewUser(msgSplit[1], msgSplit[2], msgSplit[3])
-			if err != nil {
-				conn.Write([]byte(err.Error()))
-				continue
-			} else {
-				conn.Write([]byte("Ok"))
-			}
-		}
+func NewServer() *Server {
+	return &Server{
+		conns: make(map[string]*websocket.Conn), // Store references to established connections
+		rooms: make(map[string]*Room),           // Store references to rooms
 	}
+}
 
-	reader := bufio.NewReader(conn)
-	for {
-		message, err := reader.ReadString('\n') // Wait for input
-		if err != nil {
-			fmt.Println("Client disconnected")
-			break
-		}
-		// Format the input message
-		msg := strings.Replace(message, "\n", "", -1)
-		msgSplit := strings.SplitN(msg, " ", 2) // Split input into two, command and argument
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		// Allow connections from any origin (at least for now)
+		return true
+	},
+}
 
-		if msgSplit[0] == "create" {
-			fmt.Println("Creating room:", msgSplit[1])
+func (server *Server) handleWS(w http.ResponseWriter, r *http.Request) {
+	// Upgrade HTTP connection to WebSocket connection
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		// fmt.Println("Failed to upgrade to WebSocket:", err)
+		log.Printf("ERROR: Failed to upgrade to WebSocket: %v\n", err)
+		return
+	}
+	// Create a context with cancel
+	ctx, cancel := context.WithCancel(context.Background())
+	// Run client connection handler in a goroutine
+	go server.handleConnection(ctx, cancel, conn, server.rooms)
+	// If we are here it means the connection has been closed
+	// delete(server.conns, conn) // Need mutex! ==========================================================
+}
 
-			_, exists := chats[msgSplit[1]]
-			if !exists { // Create new room if it does not yet exist
-				chats[msgSplit[1]] = &Queue{max_size: 20, data: make([]string, 0, 20)}
-				rooms[msgSplit[1]] = NewRoom()
+const (
+	ActionLogin         = "login"
+	ActionLogout        = "logout"
+	ActionSignUp        = "sign_up"
+	ActionGuestLogin    = "guest_login"
+	ActionSendMessage   = "send_message"
+	ActionJoinRoom      = "join_room"
+	ActionLeaveRoom     = "leave_room"
+	ActionDirectMessage = "direct_message"
+	ActionGetMessages   = "get_messages"
+)
 
-				conn.Write([]byte("Room created\n"))
+// Connection handler
+func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc, ws *websocket.Conn, rooms map[string]*Room) {
+	// fmt.Println("new incoming connection from client: ", ws.RemoteAddr())
+	log.Printf("INFO: incoming connection from client: %v\n", ws.RemoteAddr())
+	defer ws.Close() // Defer closing the connection until the function returns
 
-			} else {
-				conn.Write([]byte("Room already exists\n"))
+	var username = ""
+	var request ClientRequest
+	var loggedIn = true
+
+	for loggedIn { // Infinite loop, listen for incoming user requests
+		select {
+		case <-ctx.Done(): // First check whether the connection has been closed.
+			// fmt.Println("Context cancel, stopping handler")
+			log.Println("INFO: Context cancel, stopping handler")
+			return
+		default:
+			// Read a request from client in Json format making sure to stop the execution if the client has disconnected
+			err := ws.ReadJSON(&request)
+			if err != nil {
+				if websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) || err == io.EOF {
+					// fmt.Println("Client disconnected: ", ws.RemoteAddr())
+					log.Println("INFO: Client disconnected: ", ws.RemoteAddr())
+					cancel()
+					break // Seems like break does not do what it was intended to do, break the main read loop
+				}
+				fmt.Println("read error: ", err)
+				continue
 			}
 
-		} else if msgSplit[0] == "send" {
-			fmt.Println("Sending message")
+			// Process the request
+			switch request.Action {
+			case ActionLogin:
+				var loginReq LoginRequest
+				err := json.Unmarshal(request.Data, &loginReq) // Unpack data portion of the request into separate json
+				if err != nil {
+					// fmt.Println(fmt.Errorf("json unmarshal error: %v", err))
+					log.Println("ERROR: ", fmt.Errorf("json unmarshal error %v", err))
+					jResp := ServerResponse{"response", "fail", request.RequestId, "error, invalid request", nil}
+					if err := ws.WriteJSON(jResp); err != nil {
+						fmt.Println("Failed to send response: ", err.Error())
+					}
+					continue
+				}
 
-			if current_room != "" {
-				message := fmt.Sprintf("%s: %s", strings.TrimSpace(username), msgSplit[1]) // Format message adding username of the sender
+				user_id, err := GetUserDB(loginReq.Username, loginReq.Password) //
+				if err != nil {
+					// fmt.Println(fmt.Errorf("login error: %v", err)) // ==============================
+					log.Println("ERROR: ", fmt.Errorf("login error: %v", err))
+					jResp := ServerResponse{"response", "fail", request.RequestId, err.Error(), nil}
+					if err := ws.WriteJSON(jResp); err != nil {
+						// fmt.Println("Failed to send response: ", err.Error())
+						log.Println("ERROR: failed to send response", err.Error())
+					}
+					continue
+				}
+				jResp := ServerResponse{"response", "success", request.RequestId, user_id, nil}
+				if err := ws.WriteJSON(jResp); err != nil {
+					// fmt.Println("Failed to send response: ", err.Error())
+					log.Println("ERROR: failed to send response,", err.Error())
+				}
 
-				// Save the message to the Queue and distribute it among the Room subscribers
-				chats[current_room].Enqueue(message)
-				rooms[current_room].SendMessage(conn, message)
-			}
-		} else if msgSplit[0] == "connect" { // Subscribe the connection to the chatroom
-			fmt.Println("Connecting to the room:", msgSplit[1])
-			_, exists := rooms[msgSplit[1]]
-			if exists {
-				current_room = msgSplit[1]
-				rooms[current_room].Join(conn)
-			}
-			conn.Write([]byte("Connected successfully\n"))
+				// Save username and connection
+				s.mu.Lock()
+				s.conns[loginReq.Username] = ws
+				s.mu.Unlock()
+				username = loginReq.Username // Save username for reference
+				// fmt.Println(username, "logged in.")
+				log.Println("INFO:", username, "logged in.")
 
-		} else if msgSplit[0] == "leave" {
-			rooms[current_room].Leave(conn)
-			current_room = ""
+				defer func() {
+					s.mu.Lock()
+					delete(s.conns, username)
+					s.mu.Unlock()
+				}()
+			case ActionLogout:
+				var logOutRequest LogoutRequest
+				loggedIn = false
+				json.Unmarshal(request.Data, &logOutRequest)
+				// Perform logout
+				// Send response and the connection, and stop this routine
+				resp := ServerResponse{"response", "success", request.RequestId, "", json.RawMessage{}}
+				ws.WriteJSON(resp)
+				time.Sleep(50 * time.Millisecond) // Wait a little to make sure the message reaches the client
+				// fmt.Println(username, "logged out closing connection")
+				log.Println("INFO:", username, "logged out closing connection")
+				// ws.Close() // not needed since we have defer ws.Close() call
 
-			conn.Write([]byte("Left the room\n"))
+				s.mu.Lock()
+				delete(s.conns, username) // Remove dangling connection from the list
+				s.mu.Unlock()
 
-		} else if msgSplit[0] == "rooms" {
-			keys := ""
-			for k := range rooms {
-				keys += k + " " // Unfortunately this adds extra comma at the end
-			}
-			if keys != "" { // Don't need to send empty string since it will just create an empty line
-				conn.Write([]byte(keys + "\n"))
-			}
-		} else if msgSplit[0] == "check" { // Return current messages in subscribed chatroom
-			fmt.Println("Sending messages ...")
-			chat, exists := chats[current_room]
-			if exists { // If the room exists, send messages one by one
-				for _, msg := range chat.data {
-					conn.Write([]byte(msg + "\n"))
+				cancel() // Stop the goroutine
+
+			case ActionSignUp:
+				var signReq SignUpRequest
+				json.Unmarshal(request.Data, &signReq)
+				exists, err := UserExistsDB(signReq.Username)
+				if exists {
+					// fmt.Println(fmt.Errorf("sign-up error: %v", err))
+					log.Println("ERROR:", fmt.Errorf("sign-up error %v", err))
+					// resp := ServerResponse{"response", "fail", request.RequestId, fmt.Sprintf(`{"error": "%s"}`, err.Error()), nil}
+					resp := ServerResponse{"response", "fail", request.RequestId, err.Error(), nil}
+					if err := ws.WriteJSON(resp); err != nil {
+						// fmt.Println("Failed to send response: ", err.Error())
+						log.Println("ERROR: failed to send response", err.Error())
+					}
+					continue
+				}
+				err = NewUserDB(signReq.Username, signReq.Password, signReq.Email) // Send create new user request to database
+				if err != nil {
+					// fmt.Println(fmt.Errorf("sign-up error: %v", err))
+					log.Println("ERROR:", fmt.Errorf("sign-up error: %v", err))
+					// resp := ServerResponse{"response", "fail", request.RequestId, fmt.Sprintf(`{"error": "%s"}`, err.Error()), nil}
+					resp := ServerResponse{"response", "fail", request.RequestId, err.Error(), nil}
+					if err := ws.WriteJSON(resp); err != nil {
+						// fmt.Println("Failed to send response: ", err.Error())
+						log.Println("ERROR: failed to send response", err.Error())
+					}
+					continue
+				} else {
+					resp := ServerResponse{"response", "success", request.RequestId, "", nil}
+					if err := ws.WriteJSON(resp); err != nil {
+						// fmt.Println("Failed to send response: ", err.Error())
+						log.Println("ERROR: failed to send response", err.Error())
+					}
+					continue
+				}
+			case ActionSendMessage:
+				var sendReq MessageRequest
+				json.Unmarshal(request.Data, &sendReq)                            // Unwrap data portion of Json (nested Json)
+				err := NewMessageDB(sendReq.RoomID, sendReq.UserID, sendReq.Body) // ================= How does user know roomID
+				if err != nil {
+					// fmt.Println(fmt.Errorf("send message failed: %v", err))
+					log.Println("ERROR:", fmt.Errorf("send message failed, %v", err))
+				}
+				resp := ServerResponse{"response", "success", request.RequestId, "", nil}
+				if err := ws.WriteJSON(resp); err != nil {
+					// fmt.Println("Failed to send message response: ", err.Error())
+					log.Println("ERROR: failed to send message response,", err.Error())
+				}
+
+				// Send message to the Room struct stored locally
+				s.mu.RLock()
+				rooms[sendReq.RoomID].SendMessage(sendReq.RoomID, sendReq.UserID, username, ws, sendReq.Body)
+				s.mu.RUnlock()
+
+			case ActionJoinRoom:
+				var joinRReq JoinRoomRequest
+				json.Unmarshal(request.Data, &joinRReq)
+				// Update SQL table
+				_, exists := rooms[joinRReq.RoomID]
+				if !exists {
+					// fmt.Println("Error, chat does not exist")
+					log.Println("ERROR: chat does not exist")
+					resp := ServerResponse{"response", "fail", request.RequestId, "Chat with provided ID does not exist", nil}
+					if err := ws.WriteJSON(resp); err != nil {
+						// fmt.Println("Failed to send joinRoom response: ", err.Error())
+						log.Println("ERROR: failed to send joinRoom response,", err.Error())
+					}
+					return
+				}
+				// sub user in Redis server for real-time messaging =======================================================
+				// Sub user in *Room struct (add connection to the list) // this is absolete as soon the real-time messaging will be handled by Redis
+				err := JoinRoomDB(joinRReq.RoomID, joinRReq.Username)
+				if err != nil {
+					// fmt.Println(fmt.Errorf("error joining room: %v", err))
+					log.Println("ERROR:", fmt.Errorf("error joining room, %v", err))
+					jResp := ServerResponse{"response", "fail", request.RequestId, err.Error(), nil}
+					if err := ws.WriteJSON(jResp); err != nil {
+						// fmt.Println("Failed to send joinRoom response: ", err.Error())
+						log.Println("ERROR: failed to send joinRoom response,", err.Error())
+					}
+				}
+				s.mu.RLock()
+				rooms[joinRReq.RoomID].Join(ws) // Join room locally, in server record
+				s.mu.RUnlock()
+			case ActionLeaveRoom:
+				var leaveRReq LeaveRoomRequest
+				json.Unmarshal(request.Data, &leaveRReq)
+				_, exists := rooms[leaveRReq.RoomID]
+				if !exists {
+					// fmt.Println("Error, chat does not exist")
+					log.Println("ERROR: chat does not exist")
+					resp := ServerResponse{"response", "fail", request.RequestId, "Chat with provided ID does not exist", nil}
+					if err := ws.WriteJSON(resp); err != nil {
+						// fmt.Println("Failed to send response: ", err.Error())
+						log.Println("ERROR: failed to send response,", err.Error())
+					}
+				}
+				rooms[leaveRReq.RoomID].Leave(ws)
+			case ActionDirectMessage:
+				var dirMReq DirectMessageRequest
+				json.Unmarshal(request.Data, &dirMReq)
+
+				// For now, just leave local chatroom, later will remove user from chatroom_participants list in database
+				room_id, err := NewChatRoomDB(dirMReq.Sender)
+				if err != nil {
+					// fmt.Println(fmt.Errorf("error creating direct message room"))
+					log.Println("ERROR:", fmt.Errorf("error creating direct message room"))
+					resp := ServerResponse{"response", "fail", request.RequestId, err.Error(), nil}
+					if err := ws.WriteJSON(resp); err != nil {
+						// fmt.Println("Failed to send response: ", err.Error())
+						log.Println("ERROR: failed to send response,", err.Error())
+					}
+					continue
+				} else {
+					// Create new chatroom
+					s.mu.RLock()
+					rooms[room_id] = NewRoom()
+					rooms[room_id].members[ws] = true
+					s.mu.RUnlock()
+
+					resp := ServerResponse{"response", "success", request.RequestId, "", nil}
+					if err := ws.WriteJSON(resp); err != nil {
+						// fmt.Println("Failed to send create room response: ", err.Error())
+						log.Println("ERROR: failed to send create room response,", err.Error())
+					}
 				}
 			}
-
-		} else if msgSplit[0] == "exit" { // This is redundant
-			fmt.Println("Quitting ...")
-			// Stop the execution and return
-			return
-		} else {
-			fmt.Println("Received unexpected input ...")
-			conn.Write([]byte("Unexpected format\n"))
 		}
 	}
 }
 
 // Server program entry point
 func main() {
+	var server Server = *NewServer()
+	// Might leave it as an option for the user
+	// chats := make(map[string]*Queue) // Store limited number of messages in chatrooms // Replaced by SQL database
 	// Connect to the database
-	ConnectDB()
-
-	chats := make(map[string]*Queue) // Store limited number of messages in chatrooms ######################## Message Update
-	rooms := make(map[string]*Room)  // Store references to Rooms
-
-	listener, err := net.Listen("tcp", ":8080")
+	err := ConnectDB()
 	if err != nil {
-		fmt.Println("Error starting server:", err)
-		return
+		fmt.Println(fmt.Errorf("error: %v", err))
 	}
-	defer listener.Close()
-	fmt.Println("Server is listening on port 8080...")
 
-	// Accept incoming connections initiating goroutine for new ones
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			fmt.Println("Error accepting connection:", err)
-			continue
-		}
-		go handleConnection(conn, chats, rooms) // Handle each client in a goroutine
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+
+	http.HandleFunc("/ws", server.handleWS)
+
+	// fmt.Println("Server is listening on port 8080...")
+	log.Println("INFO: Server is up and listening on port 8080 ...")
+	err = http.ListenAndServe("0.0.0.0:8080", nil)
+	if err != nil {
+		// fmt.Println("Error starting server: ", err)
+		log.Println("ERROR: Could not start the server,", err)
 	}
 }
