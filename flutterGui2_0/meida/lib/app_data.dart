@@ -91,23 +91,26 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
     notifyListeners();
   }
 
-  /// As the name suggests, it ensures that there is a live connection to the server, if there is, nothing happens, if there is not an Exception is thrown
-  Future<void> ensureConnectedOrThrow({Duration timeout = const Duration(seconds: 10)}) async {
-  await socketManager.connect();
+  Future<void> ensureConnectedOrThrow(PersistentWebSocketManager manager) async {
+  if (manager.isConnected) return;
 
-  if (socketManager.isConnected) return;
+  final statusFuture = manager.onStatusChange
+      .firstWhere((s) =>
+          s == ConnectionStatus.connected || s == ConnectionStatus.fail)
+      .timeout(const Duration(seconds: 10), onTimeout: () {
+    return ConnectionStatus.fail;
+  });
 
-  final status = await socketManager.onStatusChange
-    .firstWhere((s) =>
-        s == ConnectionStatus.connected || s == ConnectionStatus.fail)
-    .timeout(timeout, onTimeout: () {
-      logger.w("Connection timed out.");
-      return ConnectionStatus.fail;
-    });
-    if (status != ConnectionStatus.connected) {
-      throw Exception("Server is unreachable.");
-    }
+  await manager.connect();
+
+  final status = await statusFuture;
+
+  if (status != ConnectionStatus.connected) {
+    throw SocketException("Connection failed or timed out.");
   }
+}
+
+
 
 
   // // Guest login that requires only username
@@ -161,7 +164,7 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
       }
 
       // Ensure socket is connected
-      await ensureConnectedOrThrow();
+      await ensureConnectedOrThrow(socketManager);
 
       // Attempt login
       var (res, id) = await server.sendLoginRequest(name, passwrd);
@@ -186,7 +189,6 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
       isLoading = false;
       notifyListeners();
     }
-
     return "Unexpected fail";
   }
 

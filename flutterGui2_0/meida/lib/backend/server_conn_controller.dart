@@ -31,43 +31,42 @@ Map<String, Completer> _pendingRequests = {}; // For now at least isolate it to 
 /// Try to reconnect with a set limit, once limit reached, emit fail signal on StatusStream
 /// There is a nuance, need to set delays between reconnects
 /// A simple approach would be to create a handleReconnect method that would call connect a set number of times with delay between the calls
-enum ConnectionStatus { connected, disconnected, connecting, fail }
+enum ConnectionStatus { connected, disconnected, fail }
 
 class PersistentWebSocketManager {
-  final Uri endpoiont = Uri.parse("ws://localhost:8080/ws"); // Hardcoded server address
-
+  final Uri endpoint = Uri.parse("ws://localhost:8080/ws"); // Hardcoded server address
   final Duration reconnectDelay;
   final int reconnectLimit;
 
-  int _reconnects = 0;
+  int _reconnectCount = 0;
   bool _connecting = false;
   bool _connected = false;
-  bool _shouldReconnect = true;
+  bool _shouldReconnect = true; // Flag to control whether the reconnects should happen.
+
+  bool get isConnected => _connected;
+  bool get isConnecting => _connecting;
 
   WebSocketChannel? _channel;
-  StreamSubscription? _subscription;
+  StreamSubscription? _subscription; // StreamSubscription object returned by listening on _channel.stream
 
-  late StreamController<ConnectionStatus>? _statusController; // Stream of connection status messages
-  late StreamController<String>? _messageController; // Stream of requests going to server?
-  Stream<ConnectionStatus> get onStatusChange => _statusController!.stream;
-  Stream<String> get onMessage => _messageController!.stream;
-  bool get isConnected => _connected;
+  // late StreamController<ConnectionStatus>? _statusController; // Stream of connection status messages
+  final _statusController = StreamController<ConnectionStatus>.broadcast(); // Initialize Status controller right away, it won't be reset as long as app is running
+  Stream<ConnectionStatus> get onStatusChange => _statusController.stream;
+
+  late StreamController<String>? _messageController; // encapsulate communication over websocket in a broadcast stream
+  Stream<String> get onMessage => _messageController!.stream; // enable subscribing to the server communication stream
 
   PersistentWebSocketManager({ // This is a constructor class
-    this.reconnectDelay = const Duration(seconds: 2), // Initialize field
-    this.reconnectLimit = 2, // Initialize field
+    this.reconnectDelay = const Duration(seconds: 2), // define delay between reconnections
+    this.reconnectLimit = 5, // define the limit of reconnect attempts that can be made before failure
   }) {
-    // initializeControllers();
-    _statusController = StreamController<ConnectionStatus>.broadcast();
     _messageController = StreamController<String>.broadcast();
+    // initializeControllers();
   }
   
   void initializeControllers() {
-    if (_messageController == null || _messageController!.isClosed) { // Don't tauch it for now
+    if (_messageController == null || _messageController!.isClosed) {
       _messageController = StreamController<String>.broadcast();
-    }
-    if (_statusController == null || _statusController!.isClosed) {
-      _statusController = StreamController<ConnectionStatus>.broadcast();
     }
   }
 
@@ -82,13 +81,12 @@ class PersistentWebSocketManager {
   }
 
   Future<void> connect() async { // Try to connect to server
-    await Future.delayed(reconnectDelay);
+    // delay to ensure status listeners are ready.
+    // await Future.delayed(Duration(seconds: 2));
 
-    // First test whether there is a connection already?
-    if (isConnected) {
-      return;
-    }
-    _cleanupSocket();
+    if (_connecting || _connected) return;
+
+    // _cleanupSocket();
     initializeControllers(); // === Issue here? =======================================================================================================
 
     // final isLive = await isServerLive("http://172.18.0.1:8080/health");
@@ -99,21 +97,20 @@ class PersistentWebSocketManager {
     //   _statusController!.add(ConnectionStatus.fail);
     //   return;
     // }
-
     logger.i("Attempting connection");
-    if (_connecting || _connected) return; // Problem, on logout the status has not been updated
+    if (_connecting || _connected) return;
     _connecting = true;
-    if (_reconnects >= reconnectLimit) { // First test whether we reached the limit of reconnects
+    if (_reconnectCount >= reconnectLimit) { // First test whether we reached the limit of reconnects
       logger.i("Reconnect limit reached");
       _connecting = false;
       _connected = false;
-      _statusController!.add(ConnectionStatus.fail); // failed to connect after reconnect limit reached.
+      _statusController.add(ConnectionStatus.fail); // failed to connect after reconnect limit reached.
       return;
     }
     try { // If reconnects limits has not been reached, try to connect to server via WebSocket
-      _statusController!.add(ConnectionStatus.connecting); // Add connecting event to stream
-      _channel = WebSocketChannel.connect(endpoiont);
-      logger.i("Connection made $_channel");
+      // _statusController!.add(ConnectionStatus.connecting); // Add connecting event to stream
+      _channel = WebSocketChannel.connect(endpoint);
+      logger.i("Connection made");
       _subscription = _channel!.stream.listen(
         (event) {
           try {
@@ -127,17 +124,15 @@ class PersistentWebSocketManager {
         cancelOnError: true, // Cancel read if we receive error
       );
       _connected = true; 
-      _statusController!.add(ConnectionStatus.connected);
-
+      _statusController.add(ConnectionStatus.connected);
       return;
     } catch (e) {
       logger.e("Exception occured while trying to connect to server: $e");
       _connected = false;
-      _statusController!.add(ConnectionStatus.fail);
+      _statusController.add(ConnectionStatus.fail);
       return;
     } finally {
       // _reconnects += 1;
-      logger.i("Reset _connecting");
       _connecting = false;
     }
   }
@@ -146,10 +141,10 @@ class PersistentWebSocketManager {
   // Possible to trigger reconnects, but for now just finish and dispose of the connection.
   void _handleError() {
     logger.w("Error occured while listening on socket channel");
-    _statusController!.add(ConnectionStatus.fail);
+    _statusController.add(ConnectionStatus.fail);
     _connected = false;
     _connecting = false;
-    _reconnects = 0;
+    _reconnectCount = 0;
     // _messageController.close(); // Get rid of the messageController, initiate one when a connect is attempted?
     _cleanupSocket();
     dispose();
@@ -170,41 +165,20 @@ class PersistentWebSocketManager {
     } catch (e) {
       logger.w("Attempted to close an already closed socket");
     }
-    _reconnects = 0; // First reconnect, reset the counter
+    _reconnectCount = 0; // First reconnect, reset the counter
     _connected = false;
     _connecting = false;
     logger.i("Reconnecting ...");
-    while (!_connected && _reconnects < reconnectLimit && _shouldReconnect) {
+    while (!_connected && _reconnectCount < reconnectLimit && _shouldReconnect) {
       // _statusController.add(ConnectionStatus.disconnected);
       // Future.delayed(reconnectDelay, connect); // Delay reconnection
       await connect();
       if (_connected) break;
       await Future.delayed(reconnectDelay);
-      _reconnects ++;
+      _reconnectCount ++;
     }
     logger.i("Disconnect handled");
   }
-
-  // void handleDisconnection() async {
-  //   isLoading = true;
-  //   loggedIn = false;
-
-  //   // Attempt to send a logout request if the server is still partially responsive (optional)
-  //   try {
-  //     await server.sendLogoutRequest(currentUser);
-  //   } catch (_) {
-  //     // ignore, likely unreachable
-  //   }
-
-  //   socketManager.dispose(); // Clean up any socket listeners
-  //   _streamSubscription?.cancel(); // Cancel any stream subscriptions
-
-  //   _streamSubscription = null; // Explicitly null it to avoid future mishaps
-
-  //   isLoading = false;
-  //   notifyListeners();
-  // }
-
   
 
   void send(String data) {
@@ -244,16 +218,16 @@ class PersistentWebSocketManager {
     _connected = false;
 
     if (force) {
-      _reconnects = 0;
+      _reconnectCount = 0;
       // Optionally cancel timers or clean up pending reconnects
     }
   }
 
   void dispose() {
     disconnect();
-    _statusController!.close();
+    // _statusController.close();
     _messageController!.close(); // The problem is we are closing
-    _statusController = null;
+    // _statusController = null;
     _messageController = null; // Keep it persistent for now, handle edge cases later.
   }
 }
@@ -280,12 +254,6 @@ class ServerConnController {
     }
   }
 
-  // Future<Map<String, dynamic>> sendRequest(String requestId, Map<String, dynamic> request) {
-  //   Completer<Map<String, dynamic>> completer = Completer();
-  //   pendingRequests[requestId] = completer;
-  //   _ws?.send(jsonEncode(request));
-  //   return completer.future;
-  // }
   Future<Map<String, dynamic>> sendRequest(String requestId, Map<String, dynamic> request, {Duration timeout = const Duration(seconds: 10)}) {
     Completer<Map<String, dynamic>> completer = Completer();
     _pendingRequests[requestId] = completer;
