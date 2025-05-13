@@ -91,16 +91,24 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
     notifyListeners();
   }
 
-  Future<bool> waitForConnection({Duration timeout = const Duration(seconds: 5)}) async {
-    try {
-      final status = await socketManager.onStatusChange
-          .firstWhere((s) => s == ConnectionStatus.connected || s == ConnectionStatus.fail)
-          .timeout(timeout);
-      return status == ConnectionStatus.connected;
-    } catch (_) {
-      return false;
+  /// As the name suggests, it ensures that there is a live connection to the server, if there is, nothing happens, if there is not an Exception is thrown
+  Future<void> ensureConnectedOrThrow({Duration timeout = const Duration(seconds: 10)}) async {
+  await socketManager.connect();
+
+  if (socketManager.isConnected) return;
+
+  final status = await socketManager.onStatusChange
+    .firstWhere((s) =>
+        s == ConnectionStatus.connected || s == ConnectionStatus.fail)
+    .timeout(timeout, onTimeout: () {
+      logger.w("Connection timed out.");
+      return ConnectionStatus.fail;
+    });
+    if (status != ConnectionStatus.connected) {
+      throw Exception("Server is unreachable.");
     }
   }
+
 
   // // Guest login that requires only username
   // void logInGuest(String name) async { // What is better, to return the value, or 
@@ -139,54 +147,32 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
     isLoading = true;
     notifyListeners();
 
-    // This block is for testing purposes, if default creds are set, they are used instead of request to server
-    if (testUser != "") {
-      if (name==testUser && passwrd==testPassword) {
-        await Future.delayed(const Duration(seconds: 1));
-        isLoading = false;
-        loggedIn = true;
-        notifyListeners();
-        currentUser = "123";
-        return "";
-      } else {
-        // return ConnectionState.fail;
-        return "fail";
-      }
-    }
-
     try {
-      // Trigger socket connection if not already connected
-      await socketManager.connect(); // Will this work or should we call handle disconnect
-
-      if (!socketManager.isConnected) {
-        // Wait for either a successful or failed connection (in case there is a delay)
-        final status = await socketManager.onStatusChange
-          .firstWhere((s) =>
-              s == ConnectionStatus.connected || s == ConnectionStatus.fail)
-          .timeout(const Duration(seconds: 10), onTimeout: () {
-            logger.w("Connection timed out.");
-            return ConnectionStatus.fail;
-          });
-
-        if (status != ConnectionStatus.connected) {
-          isLoading = false;
-          notifyListeners(); // The UI must know that the connection failed
-          return "Server is unreachable.";
+      // Testing override
+      if (testUser != "") {
+        if (name == testUser && passwrd == testPassword) {
+          await Future.delayed(const Duration(seconds: 1));
+          loggedIn = true;
+          currentUser = "123";
+          return "";
+        } else {
+          return "fail";
         }
       }
 
-      // Attempt login via server
-      var (res, id) = await server.sendLoginRequest(name, passwrd); // This is where the second login gets stuck
+      // Ensure socket is connected
+      await ensureConnectedOrThrow();
+
+      // Attempt login
+      var (res, id) = await server.sendLoginRequest(name, passwrd);
       logger.i("Login request sent, response code: $res, user id: $id");
 
       if (res == 0) {
         loggedIn = true;
         currentUser = id!;
-        // _initializeChats(); // Load cached messages
-        return "success";
+        return "";
       } else if (res == -1) {
-        logger.i("$id");
-        return "$id!"; // Am I sure this value is not null? yes, in case of error the server returns the error message in message field instead of id.
+        return "$id!";
       }
 
     } catch (e) {
@@ -200,8 +186,10 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
       isLoading = false;
       notifyListeners();
     }
+
     return "Unexpected fail";
   }
+
 
   Future<String> signUp(String name, String passwrd, String email) async { // Refactor function and its dependants
     if (isLoading) return "A related task is working, cannot login";
@@ -213,7 +201,7 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
       await socketManager.connect();
       if (!socketManager.isConnected) {
         // Wait for either a successful or failed connection (in case there is a delay)
-        final status = await socketManager.onStatusChange
+        final status = await socketManager.onStatusChange // As soon as a matching status is emitted, the stream subscription is automatically cancelled.
           .firstWhere((s) =>
               s == ConnectionStatus.connected || s == ConnectionStatus.fail)
           .timeout(const Duration(seconds: 10), onTimeout: () {
@@ -249,11 +237,13 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
   }
 
   // Logout both, user and guest
-  void logOut() {
+  void logOut() async {
 
     isLoading = true;
     loggedIn = false;
-    server.sendLogoutRequest(currentUser); // We are not going to wait for response
+
+    // Wait for confirmation of successfull logout before clean up
+    await server.sendLogoutRequest(currentUser); // We are not going to wait for response
 
     // saveChatData(currentUser, _chats.values.toList()); // Convert Map<String ChatData> to List<ChatData>
     // saveChatMetaData(currentUser, _chatList.values.toList()); // Convert Map<String ChatMetaData> to List<ChatMetaData>

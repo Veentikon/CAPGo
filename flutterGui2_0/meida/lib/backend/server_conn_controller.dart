@@ -54,8 +54,8 @@ class PersistentWebSocketManager {
   bool get isConnected => _connected;
 
   PersistentWebSocketManager({ // This is a constructor class
-    this.reconnectDelay = const Duration(seconds: 5), // Initialize field
-    this.reconnectLimit = 10, // Initialize field
+    this.reconnectDelay = const Duration(seconds: 2), // Initialize field
+    this.reconnectLimit = 2, // Initialize field
   }) {
     // initializeControllers();
     _statusController = StreamController<ConnectionStatus>.broadcast();
@@ -63,9 +63,9 @@ class PersistentWebSocketManager {
   }
   
   void initializeControllers() {
-    // if (_messageController == null || _messageController!.isClosed) { // Don't tauch it for now
-    //   _messageController = StreamController<String>.broadcast();
-    // }
+    if (_messageController == null || _messageController!.isClosed) { // Don't tauch it for now
+      _messageController = StreamController<String>.broadcast();
+    }
     if (_statusController == null || _statusController!.isClosed) {
       _statusController = StreamController<ConnectionStatus>.broadcast();
     }
@@ -74,11 +74,6 @@ class PersistentWebSocketManager {
   Future<bool> isServerLive(String url) async {
     logger.i("Checking if server is running");
     try {
-      // final uri = Uri.parse(url);
-      // final request = HttpClient().headeUrl(uri);
-      // final response = request.close();
-      // return response.then((r) => r.statusCose == 200).catchError((_) => false);
-
       final response = await http.head(Uri.parse(url));
       return response.statusCode == 200;
     } catch (_) {
@@ -87,14 +82,14 @@ class PersistentWebSocketManager {
   }
 
   Future<void> connect() async { // Try to connect to server
+    await Future.delayed(reconnectDelay);
 
     // First test whether there is a connection already?
     if (isConnected) {
       return;
     }
-
     _cleanupSocket();
-    initializeControllers();
+    initializeControllers(); // === Issue here? =======================================================================================================
 
     // final isLive = await isServerLive("http://172.18.0.1:8080/health");
     // if (!isLive) {
@@ -120,7 +115,13 @@ class PersistentWebSocketManager {
       _channel = WebSocketChannel.connect(endpoiont);
       logger.i("Connection made $_channel");
       _subscription = _channel!.stream.listen(
-        (event) => _messageController!.add(event),
+        (event) {
+          try {
+            _messageController?.add(event);
+          } catch (e) {
+            logger.w("Failed to add message to stream: $e");
+          }
+        },
         onDone: _handleDisconnect, // If done this indicates a closed socket connection, in this case we can call a disconnect handler function
         onError: (_) => _handleError(),
         cancelOnError: true, // Cancel read if we receive error
@@ -144,16 +145,21 @@ class PersistentWebSocketManager {
   // This supposed to handle the case when the connection failed, the server not responding
   // Possible to trigger reconnects, but for now just finish and dispose of the connection.
   void _handleError() {
+    logger.w("Error occured while listening on socket channel");
     _statusController!.add(ConnectionStatus.fail);
     _connected = false;
     _connecting = false;
     _reconnects = 0;
     // _messageController.close(); // Get rid of the messageController, initiate one when a connect is attempted?
     _cleanupSocket();
+    dispose();
+    // _handleDisconnect();
+    logger.i("Socket connection loss error handled");
     return;
   }
 
   void _handleDisconnect() async {
+    logger.w("Handling disconnect"); // ===============================================
     _cleanupSocket();
     // If this method is called, it means the first reconnect should be schaduled and the reconnects count is reset
     _statusController!.add(ConnectionStatus.disconnected);
@@ -167,6 +173,7 @@ class PersistentWebSocketManager {
     _reconnects = 0; // First reconnect, reset the counter
     _connected = false;
     _connecting = false;
+    logger.i("Reconnecting ...");
     while (!_connected && _reconnects < reconnectLimit && _shouldReconnect) {
       // _statusController.add(ConnectionStatus.disconnected);
       // Future.delayed(reconnectDelay, connect); // Delay reconnection
@@ -175,7 +182,30 @@ class PersistentWebSocketManager {
       await Future.delayed(reconnectDelay);
       _reconnects ++;
     }
+    logger.i("Disconnect handled");
   }
+
+  // void handleDisconnection() async {
+  //   isLoading = true;
+  //   loggedIn = false;
+
+  //   // Attempt to send a logout request if the server is still partially responsive (optional)
+  //   try {
+  //     await server.sendLogoutRequest(currentUser);
+  //   } catch (_) {
+  //     // ignore, likely unreachable
+  //   }
+
+  //   socketManager.dispose(); // Clean up any socket listeners
+  //   _streamSubscription?.cancel(); // Cancel any stream subscriptions
+
+  //   _streamSubscription = null; // Explicitly null it to avoid future mishaps
+
+  //   isLoading = false;
+  //   notifyListeners();
+  // }
+
+  
 
   void send(String data) {
     if (_channel == null || !_connected) {
@@ -201,17 +231,10 @@ class PersistentWebSocketManager {
       completer.completeError("Connection lost before response");
     }
     _pendingRequests.clear();
+    logger.i("socket cleaned up");
+    return;
   }
 
-  // void disconnect() {
-  //   logger.i("Client disconnected.");
-  //   // _subscription?.cancel();
-  //   // _channel?.sink.close();
-  //   _cleanupSocket();
-  //   _statusController!.add(ConnectionStatus.disconnected);
-  //   _connecting = false;
-  //   _connected = false;
-  // }
   void disconnect({bool force = false}) {
     _shouldReconnect = !force;
     logger.i("Client disconnected${force ? " (forced)" : ""}.");
@@ -226,13 +249,12 @@ class PersistentWebSocketManager {
     }
   }
 
-
   void dispose() {
     disconnect();
     _statusController!.close();
-    // _messageController!.close(); // The problem is we are closing
+    _messageController!.close(); // The problem is we are closing
     _statusController = null;
-    // _messageController = null; // Keep it persistent for now, handle edge cases later.
+    _messageController = null; // Keep it persistent for now, handle edge cases later.
   }
 }
 
