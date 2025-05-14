@@ -61,10 +61,10 @@ class PersistentWebSocketManager {
     this.reconnectLimit = 5, // define the limit of reconnect attempts that can be made before failure
   }) {
     _messageController = StreamController<String>.broadcast();
-    // initializeControllers();
+    // initializeControllers(); // Do I actually need this? only in the case of _messageController which needs to be reset on every connection
   }
   
-  void initializeControllers() {
+  void initializeControllers() { // _message controller needs to be reset when a connection is lost so that we are not listening on a dead stream / server connection
     if (_messageController == null || _messageController!.isClosed) {
       _messageController = StreamController<String>.broadcast();
     }
@@ -81,13 +81,8 @@ class PersistentWebSocketManager {
   }
 
   Future<void> connect() async { // Try to connect to server
-    // delay to ensure status listeners are ready.
-    // await Future.delayed(Duration(seconds: 2));
-
     if (_connecting || _connected) return;
-
-    // _cleanupSocket();
-    initializeControllers(); // === Issue here? =======================================================================================================
+    initializeControllers(); // if 
 
     // final isLive = await isServerLive("http://172.18.0.1:8080/health");
     // if (!isLive) {
@@ -97,7 +92,8 @@ class PersistentWebSocketManager {
     //   _statusController!.add(ConnectionStatus.fail);
     //   return;
     // }
-    logger.i("Attempting connection");
+
+    logger.i("Connecting to server ...");
     if (_connecting || _connected) return;
     _connecting = true;
     if (_reconnectCount >= reconnectLimit) { // First test whether we reached the limit of reconnects
@@ -110,7 +106,6 @@ class PersistentWebSocketManager {
     try { // If reconnects limits has not been reached, try to connect to server via WebSocket
       // _statusController!.add(ConnectionStatus.connecting); // Add connecting event to stream
       _channel = WebSocketChannel.connect(endpoint);
-      logger.i("Connection made");
       _subscription = _channel!.stream.listen(
         (event) {
           try {
@@ -132,7 +127,7 @@ class PersistentWebSocketManager {
       _statusController.add(ConnectionStatus.fail);
       return;
     } finally {
-      // _reconnects += 1;
+      // _reconnects += 1; // =======================================================
       _connecting = false;
     }
   }
@@ -140,24 +135,21 @@ class PersistentWebSocketManager {
   // This supposed to handle the case when the connection failed, the server not responding
   // Possible to trigger reconnects, but for now just finish and dispose of the connection.
   void _handleError() {
-    logger.w("Error occured while listening on socket channel");
+    logger.e("Error occured while listening on socket channel");
     _statusController.add(ConnectionStatus.fail);
     _connected = false;
     _connecting = false;
     _reconnectCount = 0;
-    // _messageController.close(); // Get rid of the messageController, initiate one when a connect is attempted?
-    _cleanupSocket();
     dispose();
-    // _handleDisconnect();
-    logger.i("Socket connection loss error handled");
+    _handleDisconnect();
     return;
   }
 
   void _handleDisconnect() async {
-    logger.w("Handling disconnect"); // ===============================================
+    logger.w("Handling disconnect ..."); // ===============================================
     _cleanupSocket();
     // If this method is called, it means the first reconnect should be schaduled and the reconnects count is reset
-    _statusController!.add(ConnectionStatus.disconnected);
+    _statusController.add(ConnectionStatus.disconnected);
     _subscription?.cancel(); // Cancel previous subscription so that it does not hang
 
     try {
@@ -171,7 +163,7 @@ class PersistentWebSocketManager {
     logger.i("Reconnecting ...");
     while (!_connected && _reconnectCount < reconnectLimit && _shouldReconnect) {
       // _statusController.add(ConnectionStatus.disconnected);
-      // Future.delayed(reconnectDelay, connect); // Delay reconnection
+      Future.delayed(reconnectDelay, connect); // Delay reconnection
       await connect();
       if (_connected) break;
       await Future.delayed(reconnectDelay);
@@ -213,7 +205,7 @@ class PersistentWebSocketManager {
     _shouldReconnect = !force;
     logger.i("Client disconnected${force ? " (forced)" : ""}.");
     _cleanupSocket();
-    _statusController!.add(ConnectionStatus.disconnected);
+    _statusController.add(ConnectionStatus.disconnected);
     _connecting = false;
     _connected = false;
 
@@ -234,13 +226,37 @@ class PersistentWebSocketManager {
 
 class ServerConnController {
   final PersistentWebSocketManager? _ws;
+  late StreamSubscription<String> _messageSub;
+  late StreamSubscription<ConnectionStatus> _statusSub;
   // Map<String, Completer> pendingRequests = {}; // Moved initialization to global scope
 
   final uuid = Uuid(); // Unique Id generator
   // WebSocketChannel? get channel => _channel;
 
   ServerConnController(this._ws) {
-    _ws?.onMessage.listen(_handleMessage); // Add _handleMessae as a listener on broadcast message stream piped to a WebSocket connection to server
+    // _ws?.onMessage.listen(_handleMessage); // Add _handleMessage as a listener on broadcast message stream piped to a WebSocket connection to server
+    _listenToStatusChanges();
+  }
+
+  void _listenToStatusChanges() {
+    logger.i("Connection status stream listener initiated");
+    _statusSub = _ws!.onStatusChange.listen((status) {
+      if (status == ConnectionStatus.connected) {
+        _subscribeToMessages(); // only subscribe when a fresh connection is made
+      } else if (status == ConnectionStatus.disconnected || status == ConnectionStatus.fail) {
+        logger.w("Connection controller detected disconnect");
+        _messageSub.cancel(); // Stop listening to dead message stream
+      }
+    });
+  }
+
+  void _subscribeToMessages() {
+    logger.i("Subscribed to socket message stream");
+    _messageSub = _ws!.onMessage.listen(
+      _handleMessage,
+      onError: (e) => logger.e("Message listener error: $e"),
+      cancelOnError: true,
+    );
   }
 
   void _handleMessage(String response) {
@@ -252,6 +268,11 @@ class ServerConnController {
     } else {
       handleNotification(decoded);
     }
+  }
+
+  void dispose() {
+    _messageSub.cancel();
+    _statusSub.cancel();
   }
 
   Future<Map<String, dynamic>> sendRequest(String requestId, Map<String, dynamic> request, {Duration timeout = const Duration(seconds: 10)}) {

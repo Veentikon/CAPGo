@@ -187,3 +187,6 @@ Ideally, when a user logs in only if the user has logged in on a given device be
 Such as icons, settings, and cached messages. However if I go by the most simple implementation first, each time a user logs in, the server
 will return all the information related to the user account along with some messages.
 
+Connection and Status stream listener race condition handling ----
+Previously I used a delay between connect() and steram listener, but that approach was brittel and environment dependent. 
+Instead, the listener is initialized first before initiating the connection() event, this approach handles the race condition directly.

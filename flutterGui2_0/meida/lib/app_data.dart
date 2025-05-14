@@ -110,9 +110,6 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
   }
 }
 
-
-
-
   // // Guest login that requires only username
   // void logInGuest(String name) async { // What is better, to return the value, or 
   //   if (isLoading) return;
@@ -200,23 +197,7 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
     notifyListeners();
 
     try {
-      await socketManager.connect();
-      if (!socketManager.isConnected) {
-        // Wait for either a successful or failed connection (in case there is a delay)
-        final status = await socketManager.onStatusChange // As soon as a matching status is emitted, the stream subscription is automatically cancelled.
-          .firstWhere((s) =>
-              s == ConnectionStatus.connected || s == ConnectionStatus.fail)
-          .timeout(const Duration(seconds: 10), onTimeout: () {
-            logger.w("Connection timed out.");
-            return ConnectionStatus.fail;
-          });
-
-        if (status != ConnectionStatus.connected) {
-          isLoading = false;
-          notifyListeners(); // The UI must know that the connection failed
-          return "Server is unreachable.";
-        }
-      }
+      await ensureConnectedOrThrow(socketManager);
 
       var (res, msg) = await server.sendSignUpRequest(name, passwrd, email); // Send login request to the server, How do I wait for response?
       isLoading = false;
@@ -230,6 +211,10 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
         return "$msg";
       }
     } catch (e) {
+      if (e is SocketException) {
+        logger.w("Server is unreachable.");
+        return "Server is down or unreachable.";
+      }
       logger.w(e.toString()); // In this case the source of error needs to be logged but may not be reported to the user
       return "Sign up failed";
     } finally {
