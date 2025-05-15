@@ -141,7 +141,7 @@ class PersistentWebSocketManager {
     _connecting = false;
     _reconnectCount = 0;
     dispose();
-    _handleDisconnect();
+    // _handleDisconnect();
     return;
   }
 
@@ -150,28 +150,27 @@ class PersistentWebSocketManager {
     _cleanupSocket();
     // If this method is called, it means the first reconnect should be schaduled and the reconnects count is reset
     _statusController.add(ConnectionStatus.disconnected);
-    _subscription?.cancel(); // Cancel previous subscription so that it does not hang
+    await _subscription?.cancel(); // Cancel previous subscription so that it does not hang
+    _subscription = null;
 
     try {
       await _channel?.sink.close(); // close previous channel to free up the resources
     } catch (e) {
       logger.w("Attempted to close an already closed socket");
+      _channel = null;
     }
     _reconnectCount = 0; // First reconnect, reset the counter
     _connected = false;
     _connecting = false;
     logger.i("Reconnecting ...");
     while (!_connected && _reconnectCount < reconnectLimit && _shouldReconnect) {
-      // _statusController.add(ConnectionStatus.disconnected);
-      Future.delayed(reconnectDelay, connect); // Delay reconnection
+      await Future.delayed(reconnectDelay);
       await connect();
       if (_connected) break;
-      await Future.delayed(reconnectDelay);
-      _reconnectCount ++;
+      _reconnectCount++;
     }
     logger.i("Disconnect handled");
   }
-  
 
   void send(String data) {
     if (_channel == null || !_connected) {
@@ -217,7 +216,13 @@ class PersistentWebSocketManager {
 
   void dispose() {
     disconnect();
+    if (_messageController?.isClosed != true) {
+      _messageController?.close();
+    }
+    // _messageController = null;
     // _statusController.close();
+    _subscription?.cancel();
+    _subscription = null;
     _messageController!.close(); // The problem is we are closing
     // _statusController = null;
     _messageController = null; // Keep it persistent for now, handle edge cases later.
