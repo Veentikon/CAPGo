@@ -215,17 +215,19 @@ class PersistentWebSocketManager {
   }
 
   void dispose() {
+    try {
     disconnect();
     if (_messageController?.isClosed != true) {
       _messageController?.close();
     }
-    // _messageController = null;
+    _messageController = null;
     // _statusController.close();
     _subscription?.cancel();
     _subscription = null;
-    _messageController!.close(); // The problem is we are closing
     // _statusController = null;
-    _messageController = null; // Keep it persistent for now, handle edge cases later.
+    } catch (e) {
+      logger.w(e);
+    }
   }
 }
 
