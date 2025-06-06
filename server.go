@@ -298,6 +298,11 @@ func main() {
 		fmt.Println(fmt.Errorf("error: %v", err))
 	}
 
+	err = ConnectRedis()
+	if err != nil {
+		log.Println("ERROR:", err)
+	}
+
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
