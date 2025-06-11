@@ -22,6 +22,7 @@ import (
 type Server struct {
 	conns map[string]*websocket.Conn
 	rooms map[string]*Room
+	users map[string]string // [userId] = username
 	mu    sync.RWMutex
 }
 
@@ -143,7 +144,9 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 
 				// Save username and connection
 				s.mu.Lock()
-				s.conns[loginReq.Username] = ws
+				s.conns[userId] = ws
+				s.users[userId] = loginReq.Username
+
 				// Retrieve ids of subscribed rooms from db, if such rooms does not exist in the map, create it.
 				// Subscribe the user to all the rooms
 				user_id_int, err := strconv.Atoi(userId)
@@ -167,7 +170,7 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 				}
 				s.mu.Unlock()
 				username = loginReq.Username // Save username for reference
-				log.Println("INFO:", username, "logged in.")
+				log.Println("INFO:", username, userId, "logged in.")
 
 				defer func() {
 					s.mu.Lock()
@@ -190,7 +193,8 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 
 				// user_id, err := GetUserDB(loginReq.Username, loginReq.Password)
 				s.mu.Lock()
-				delete(s.conns, username) // Remove dangling connection from the list
+				delete(s.conns, userId) // Remove dangling connection from the list
+				delete(s.users, userId)
 				user_id_int, err := strconv.Atoi(userId)
 				if err != nil {
 					log.Printf("ERROR: failed to convert user id to integer: %v\n", err)
@@ -206,7 +210,6 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 					}
 				}
 				s.mu.Unlock()
-
 				cancel() // Stop the goroutine
 
 			case ActionSignUp:
@@ -259,7 +262,7 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 
 				// Send message to the Room struct stored locally
 				s.mu.RLock()
-				rooms[sendReq.RoomID].SendMessage(sendReq.RoomID, sendReq.UserID, username, ws, sendReq.Body)
+				rooms[sendReq.RoomID].SendMessage(sendReq.RoomID, userId, username, ws, sendReq.Body)
 				s.mu.RUnlock()
 
 			case ActionJoinRoom:
@@ -279,7 +282,7 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 				}
 				// sub user in Redis server for real-time messaging =======================================================
 				// Sub user in *Room struct (add connection to the list) // this is absolete as soon the real-time messaging will be handled by Redis
-				err := JoinRoomDB(joinRReq.RoomID, joinRReq.Username)
+				err := JoinRoomDB(joinRReq.RoomID, userId) // We already know userId
 				if err != nil {
 					// fmt.Println(fmt.Errorf("error joining room: %v", err))
 					log.Println("ERROR:", fmt.Errorf("error joining room, %v", err))
@@ -341,9 +344,39 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 			case ActionFindUser:
 				var fUReq FindUserRequest
 				json.Unmarshal(request.Data, &fUReq)
+				// Search the db for the keyword user entered
+				continue
+			case ActionCreateRoom:
+				var cRReq CreateRoomRequest
 
-				// Search the db for the keyword user entereD
-
+				if err := json.Unmarshal(request.Data, &cRReq); err != nil {
+					log.Println("ERROR: invalid CreateRoomRequest:", err)
+					resp := ServerResponse{"response", "fail", request.RequestId, err.Error(), nil}
+					ws.WriteJSON(resp)
+					continue
+				}
+				room_id, err := NewChatRoomDB(userId) // Creat new Room in database
+				if err != nil {
+					// fmt.Println(fmt.Errorf("error creating direct message room"))
+					log.Println("ERROR:", fmt.Errorf("error creating direct message room"))
+					resp := ServerResponse{"response", "fail", request.RequestId, err.Error(), nil}
+					if err := ws.WriteJSON(resp); err != nil {
+						// fmt.Println("Failed to send response: ", err.Error())
+						log.Println("ERROR: failed to send response,", err.Error())
+					}
+					continue
+				} else {
+					var chatroom = NewRoom() // Create in Memory representation of the chatroom
+					for i := 0; i < len(cRReq.Users); i++ {
+						chatroom.Join(s.conns[cRReq.Users[i]])
+						JoinRoomDB(room_id, s.users[cRReq.Users[i]])
+					}
+					chatroom.Join(ws)
+					s.mu.Lock()
+					rooms[room_id] = chatroom
+					go chatroom.startBroadcast()
+					s.mu.Unlock()
+				}
 			}
 		}
 	}

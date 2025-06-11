@@ -62,6 +62,10 @@ type FindUserRequest struct {
 	Keyword string `json:"keyword"`
 }
 
+type CreateRoomRequest struct { // Accepts a list of user ids to add to the room, the list is at least of length 1
+	Users []string `json:"users"` // where each user string is user_id
+}
+
 // Server Response types ================================================================
 type ServerResponse struct {
 	Type      string          `json:"type"` // Type of server response: response, new_message, error, etc.
