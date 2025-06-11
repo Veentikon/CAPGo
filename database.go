@@ -1,6 +1,7 @@
 package main
 
 import (
+	// "container/list"
 	"context"
 	"errors"
 	"fmt"
@@ -152,6 +153,7 @@ func NewMessageDB(room_id string, sender_id string, message string) error {
 	return nil
 }
 
+// Update the logic to actually return the result
 // Returns messages in a given chatroom
 func GetMessagesDB(room_id string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // Set up query timeout
@@ -172,6 +174,8 @@ func GetMessagesDB(room_id string) error {
 		if err := rows.Scan(&sender_id, &content, &timestamp); err != nil {
 			return err
 		}
+
+		// Return the data ==================================================================================================================
 	}
 
 	return nil
@@ -216,6 +220,35 @@ func LeaveRoomDB(room_id_str string, user_id_str string) error {
 	_, err = db.Exec(ctx, query, room_id_int, user_id_int)
 
 	return err
+}
+
+func GetRoomsDB(user_id int) ([]int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	query := "SELECT room_id FROM chatroom_participants WHERE user_id = $1"
+	rows, err := db.Query(ctx, query, user_id)
+
+	if err != nil {
+		return nil, fmt.Errorf("query failed: %w", err)
+	}
+	defer rows.Close()
+
+	var rooms []int
+
+	for rows.Next() {
+		var room_id int
+		if err := rows.Scan(&room_id); err != nil {
+			return nil, err
+		}
+		rooms = append(rooms, room_id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return rooms, nil
 }
 
 // Close the connection to the database

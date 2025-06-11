@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -14,6 +15,9 @@ import (
 	// "sync"
 	// "crypto/tls"
 )
+
+// / When a user logs in, they are added to the redis list of love users and subscribed to chatrooms they belong to
+// var connUsersMap = make(map[string]*websocket.Conn) // Hashmap user: websocket connection
 
 type Server struct {
 	conns map[string]*websocket.Conn
@@ -34,6 +38,14 @@ var upgrader = websocket.Upgrader{
 		return true
 	},
 }
+
+// ================================== Redis component is put on hold in favor of in-memory go server message handling.
+// // The purpose of this function is to handle user set up with redis
+// // this involves setting status of the user as online
+// // Retrieving all the rooms they are subscribed with, and subscribe them with the redis rooms for instant message broadcasting
+// func handleRedisLogin(user_id string) {
+// 	rd.RedisSet("user:online:"+user_id, "true")
+// }
 
 func (server *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	// Upgrade HTTP connection to WebSocket connection
@@ -60,7 +72,9 @@ const (
 	ActionJoinRoom      = "join_room"
 	ActionLeaveRoom     = "leave_room"
 	ActionDirectMessage = "direct_message"
+	ActionCreateRoom    = "create_room"
 	ActionGetMessages   = "get_messages"
+	ActionFindUser      = "find_user"
 )
 
 // Connection handler
@@ -70,6 +84,7 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 	defer ws.Close() // Defer closing the connection until the function returns
 
 	var username = ""
+	var userId = ""
 	var request ClientRequest
 	var loggedIn = true
 
@@ -108,7 +123,8 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 					continue
 				}
 
-				user_id, err := GetUserDB(loginReq.Username, loginReq.Password) //
+				userId, err = GetUserDB(loginReq.Username, loginReq.Password) //
+				// userId = user_id
 				if err != nil {
 					// fmt.Println(fmt.Errorf("login error: %v", err)) // ==============================
 					log.Println("ERROR: ", fmt.Errorf("login error: %v", err))
@@ -119,7 +135,7 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 					}
 					continue
 				}
-				jResp := ServerResponse{"response", "success", request.RequestId, user_id, nil}
+				jResp := ServerResponse{"response", "success", request.RequestId, userId, nil}
 				if err := ws.WriteJSON(jResp); err != nil {
 					// fmt.Println("Failed to send response: ", err.Error())
 					log.Println("ERROR: failed to send response,", err.Error())
@@ -128,9 +144,29 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 				// Save username and connection
 				s.mu.Lock()
 				s.conns[loginReq.Username] = ws
+				// Retrieve ids of subscribed rooms from db, if such rooms does not exist in the map, create it.
+				// Subscribe the user to all the rooms
+				user_id_int, err := strconv.Atoi(userId)
+				if err != nil {
+					log.Printf("ERROR: failed to convert user id to integer: %v\n", err)
+					log.Println("ERROR: Failed to subscribe the user to their rooms")
+				} else {
+					room_ids, err := GetRoomsDB(user_id_int)
+					if err != nil {
+						log.Println("ERROR: failed to retrieve rooms from database: %w", err)
+					}
+					for i := 0; i < len(room_ids); i++ {
+						room_id_str := strconv.Itoa(room_ids[i])
+						var room *Room = s.rooms[room_id_str]
+						if room == nil {
+							room = NewRoom()
+							s.rooms[room_id_str] = room
+						}
+						s.rooms[room_id_str].Join(ws)
+					}
+				}
 				s.mu.Unlock()
 				username = loginReq.Username // Save username for reference
-				// fmt.Println(username, "logged in.")
 				log.Println("INFO:", username, "logged in.")
 
 				defer func() {
@@ -138,6 +174,7 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 					delete(s.conns, username)
 					s.mu.Unlock()
 				}()
+
 			case ActionLogout:
 				var logOutRequest LogoutRequest
 				loggedIn = false
@@ -151,8 +188,23 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 				log.Println("INFO:", username, "logged out closing connection")
 				// ws.Close() // not needed since we have defer ws.Close() call
 
+				// user_id, err := GetUserDB(loginReq.Username, loginReq.Password)
 				s.mu.Lock()
 				delete(s.conns, username) // Remove dangling connection from the list
+				user_id_int, err := strconv.Atoi(userId)
+				if err != nil {
+					log.Printf("ERROR: failed to convert user id to integer: %v\n", err)
+					log.Println("ERROR: Failed to subscribe the user to their rooms")
+				} else {
+					room_ids, err := GetRoomsDB(user_id_int)
+					if err != nil {
+						log.Println("ERROR: failed to retrieve rooms from database: %w", err)
+					}
+					for i := 0; i < len(room_ids); i++ {
+						room_id_str := strconv.Itoa(room_ids[i])
+						s.rooms[room_id_str].Leave(ws)
+					}
+				}
 				s.mu.Unlock()
 
 				cancel() // Stop the goroutine
@@ -252,8 +304,9 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 						// fmt.Println("Failed to send response: ", err.Error())
 						log.Println("ERROR: failed to send response,", err.Error())
 					}
+				} else {
+					rooms[leaveRReq.RoomID].Leave(ws)
 				}
-				rooms[leaveRReq.RoomID].Leave(ws)
 			case ActionDirectMessage:
 				var dirMReq DirectMessageRequest
 				json.Unmarshal(request.Data, &dirMReq)
@@ -272,7 +325,10 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 				} else {
 					// Create new chatroom
 					s.mu.RLock()
-					rooms[room_id] = NewRoom()
+					var chatroom = NewRoom()
+					// rooms[room_id] = NewRoom()
+					go chatroom.startBroadcast() // Start broadcast goroutine that listens on channel and broadcasts message to all participants
+					rooms[room_id] = chatroom
 					rooms[room_id].members[ws] = true
 					s.mu.RUnlock()
 
@@ -282,6 +338,12 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 						log.Println("ERROR: failed to send create room response,", err.Error())
 					}
 				}
+			case ActionFindUser:
+				var fUReq FindUserRequest
+				json.Unmarshal(request.Data, &fUReq)
+
+				// Search the db for the keyword user entereD
+
 			}
 		}
 	}

@@ -58,6 +58,10 @@ type LogoutRequest struct {
 	UserId string `json:"user_id"`
 }
 
+type FindUserRequest struct {
+	Keyword string `json:"keyword"`
+}
+
 // Server Response types ================================================================
 type ServerResponse struct {
 	Type      string          `json:"type"` // Type of server response: response, new_message, error, etc.

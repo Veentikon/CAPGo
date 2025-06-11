@@ -32,20 +32,20 @@ func newRedisHandler(addr, password string, db int) *RedisHandler {
 }
 
 // ============= Lower level redis functions
-func (r *RedisHandler) Set(key string, value interface{}) error {
+func (r *RedisHandler) RedisSet(key string, value interface{}) error {
 	return r.client.Set(r.ctx, key, value, 0).Err()
 }
 
-func (r *RedisHandler) Get(key string) (string, error) {
+func (r *RedisHandler) RedisGet(key string) (string, error) {
 	return r.client.Get(r.ctx, key).Result()
 }
 
-func (r *RedisHandler) Subscribe(channel string) *redis.PubSub {
+func (r *RedisHandler) ResidSubscribe(channel string) *redis.PubSub {
 	return r.client.Subscribe(r.ctx, channel)
 }
 
 func ConnectRedis() error {
-	rd = newRedisHandler("redis:6379", "S?sd^l.!23", 0)
+	rd = newRedisHandler("redis:6379", "S?sd^l.!23", 0) // This needs to be read from a config file
 	_, err := rd.client.Ping(rd.ctx).Result()
 	if err != nil {
 		log.Fatalf("Failed to connect to Redis: %v", err)
