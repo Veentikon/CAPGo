@@ -292,7 +292,7 @@ class ServerConnController {
     });
   }
 
-  /* Process unsolicited, server initiated messages */
+  /* Process unsolicited, server initiated messages or messages sent by other users */
   void handleNotification(Map<String, dynamic> decodedMessage) {
     String type = decodedMessage['type'] ?? 'unknown';
     String requestId = decodedMessage['request_id'] ?? '';
@@ -302,9 +302,10 @@ class ServerConnController {
         _pendingRequests[requestId]!.complete(decodedMessage); // Completes the Future
         _pendingRequests.remove(requestId);
       }
-    } else if (type == 'new_message') {
+    } else if (type == 'message') {
       // Process a broadcast message or something unrelated to a specific request
-      logger.i("New message: ${decodedMessage['content']}");
+      logger.i("New message: ${decodedMessage['content']}"); // For testing, just print the message to the console. 
+
       // Update application state here
     } else if (type == 'error') {
       if (_pendingRequests.containsKey(requestId)) {

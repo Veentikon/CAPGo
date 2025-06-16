@@ -251,6 +251,10 @@ func GetRoomsDB(user_id int) ([]int, error) {
 	return rooms, nil
 }
 
+func FindUsers(keyword string) ([]int, error) {
+	return nil, nil
+}
+
 // Close the connection to the database
 func CloseDB() {
 	if db != nil {

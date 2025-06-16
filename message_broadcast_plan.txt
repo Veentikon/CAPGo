@@ -1,0 +1,27 @@
+1. Implement Efficient room message broadcasting
+Chatrooms and messages are kept in sql database
+Lazy go routines, they are not activated until a room becomes active (How do we know when it becomes active? a message comes?).
+If a room becomes inactive, shut down the broadcast go routine (callback?).
+How to detect / keep track of activity status of chatrooms?
+The first solution that comes to mind is to have one go routine responsible for checking activity in
+chatrooms' last active time stamp. If the last activity was within last 10 minutes, the room is active. This approach however could result in slight lag, as well as the check routine will be circling around the chatrooms which might not be very efficient.
+
+
+Algorithm
+A user is added to contacts, room is created (no broadcast routine). After x time of inactivity, it is shut down. When a client sends message, it is received and processed by server more specifically the particular socket handler which records message in db, then it checks whether a broadcast routine is active, if not, it activates the go routine and then sends to the the room.
+
+Now the details
+When is broadcast routine activated, what are the conditions?
+When it is dead and there are incoming messages and there are listeners (are they removed if socket goes bad or they log out?).
+When is it shut down? after arbitrary x amount of time
+How specifically is its' activity tracked?
+A naive way is to set timer to shut it down which is reset when there are messages coming in. This solution will not work very well in a situation where the go routine timout / planned shutdown happens in between the client handler check and client handler sending the message to the room.
+Is there a workaround?
+Somehow "Freeze" the room while client handler checks its status and sends the message?
+What if every message sent creates a go routine that broadcasts the message to all subscribers, then dies. Shutdown has to grab mutes first, this avoids the race condition.
+Spawning go routines on each message, even thou go routines themselves have little overhead, will cause a bottleneck in memory.
+What if the sending client handler ensures the message is sent to all the chatroom parcitipants?
+It is by far the simplest solution that does not require any additional go routines, but what is the tradeoff? more load on client handler should not be too large considering the sender routine does not need to manage too many requests at the same time, there are limits to how fast the user can type, etc.
+
+Conclusion
+For the initial MVP and when chatrooms are small, giving message broadcasting task to sender client handler routine is good enough. However, as rooms grow in size and tasks the client handler increase in number we would want to minimize the load on each handler. Ideally implement multiple solutions which are selected on per-case basis based on factors such as room size or activity level.

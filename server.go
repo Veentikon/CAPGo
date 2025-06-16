@@ -30,6 +30,7 @@ func NewServer() *Server {
 	return &Server{
 		conns: make(map[string]*websocket.Conn), // Store references to established connections
 		rooms: make(map[string]*Room),           // Store references to rooms
+		users: make(map[string]string),
 	}
 }
 
@@ -259,11 +260,21 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 					// fmt.Println("Failed to send message response: ", err.Error())
 					log.Println("ERROR: failed to send message response,", err.Error())
 				}
-
 				// Send message to the Room struct stored locally
-				s.mu.RLock()
-				rooms[sendReq.RoomID].SendMessage(sendReq.RoomID, userId, username, ws, sendReq.Body)
-				s.mu.RUnlock()
+				// s.mu.RLock()
+				theRoom := rooms[sendReq.RoomID]
+				// rooms[sendReq.RoomID].SendMessage(sendReq.RoomID, userId, username, ws, sendReq.Body)
+				theRoom.mu.Lock()
+				msg := SendMessage{sendReq.RoomID, userId, username, sendReq.Body}
+				for wsock := range theRoom.members {
+					if wsock != s.conns[username] { // Don't send to the sender (compare by reference)
+						resp, _ := json.Marshal(msg)
+						ws.WriteJSON(ServerResponse{"message", "receive", "", "", resp})
+					}
+				}
+				theRoom.mu.Unlock()
+				// Broadcast message to all the subscribers
+				// s.mu.RUnlock()
 
 			case ActionJoinRoom:
 				var joinRReq JoinRoomRequest
@@ -345,6 +356,7 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 				var fUReq FindUserRequest
 				json.Unmarshal(request.Data, &fUReq)
 				// Search the db for the keyword user entered
+
 				continue
 			case ActionCreateRoom:
 				var cRReq CreateRoomRequest
@@ -393,10 +405,10 @@ func main() {
 		fmt.Println(fmt.Errorf("error: %v", err))
 	}
 
-	err = ConnectRedis()
-	if err != nil {
-		log.Println("ERROR:", err)
-	}
+	// err = ConnectRedis() // Not active in current implementation
+	// if err != nil {
+	// 	log.Println("ERROR:", err)
+	// }
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

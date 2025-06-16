@@ -24,11 +24,11 @@ func NewRoom() *Room {
 		members:   make(map[*websocket.Conn]bool),
 		broadcast: make(chan Message),
 	}
-	go room.startBroadcast() // Start listening for messages
+	// go room.startBroadcast() // Start listening for messages
 	return room
 }
 
-func (r *Room) startBroadcast() {
+func (r *Room) startBroadcast() { // Need to add identifiers for GUI to distinguish to which room the message belongs to
 	for msg := range r.broadcast { // Blocking call, waits for messages
 		r.mu.Lock()
 		for ws := range r.members {
