@@ -223,6 +223,12 @@ class MyAppState extends ChangeNotifier { // it extends ChangeNotifier that allo
     }
   }
 
+  Future<String> FindUser(String keyword) async {
+    var res = server.sendSearchUserRequest(keyword);
+
+    return "OK";
+  }
+
   // Logout both, user and guest
   void logOut() async {
 

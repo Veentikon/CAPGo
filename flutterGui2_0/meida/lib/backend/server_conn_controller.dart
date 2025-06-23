@@ -574,6 +574,28 @@ class ServerConnController {
     }
   }
 
+  Future<String> sendSearchUserRequest(String keyword) async { // =================================================== Needs polishing
+    var requestId = uuid.v4();
+    var request = {
+      "action": "find_user",
+      "request_id": requestId,
+      "data": {
+        "keyword": keyword
+      }
+    };
+    try {
+      var response = await sendRequest(requestId, request);
+      if (response["type"] == "response" && response["status"] == "success") {
+        return "Ok";
+      } else {
+        return "Not Ok";
+      }
+    } catch (error) {
+      logger.w("Error searching for user: $error");
+      return "Very Not Ok";
+    }
+  }
+
   /// This is left here for reference purposes
   // Future<int> sendLeaveRoomRequest(userId, roomId) {
   //   var requestId = uuid.v4();

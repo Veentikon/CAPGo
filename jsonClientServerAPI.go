@@ -94,3 +94,12 @@ type SendMessage struct {
 	SenderName string `json:"sender"`
 	Message    string `json:"message"`
 }
+
+// type FindUserResponse struct {
+// 	Users [][]string `json:"users"`
+// }
+
+type UserSummary struct {
+	Id       string `json:"id"`
+	Username string `json:"username"`
+}

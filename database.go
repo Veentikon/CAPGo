@@ -251,8 +251,27 @@ func GetRoomsDB(user_id int) ([]int, error) {
 	return rooms, nil
 }
 
-func FindUsers(keyword string) ([]int, error) {
-	return nil, nil
+func FindUserDB(keyword string) ([]UserSummary, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	query := "SELECT id, username FROM users WHERE username LIKE %$1%"
+	rows, err := db.Query(ctx, query, keyword)
+	if err != nil {
+		return nil, fmt.Errorf("query failed: %w", err)
+	}
+	defer rows.Close()
+
+	var matchedUsers []UserSummary
+
+	for rows.Next() {
+		var id int
+		var username string
+		if err := rows.Scan(&id, &username); err != nil {
+			return nil, err
+		}
+		matchedUsers = append(matchedUsers, UserSummary{Id: strconv.Itoa(id), Username: username})
+	}
+	return matchedUsers, nil
 }
 
 // Close the connection to the database

@@ -356,8 +356,19 @@ func (s *Server) handleConnection(ctx context.Context, cancel context.CancelFunc
 				var fUReq FindUserRequest
 				json.Unmarshal(request.Data, &fUReq)
 				// Search the db for the keyword user entered
-
-				continue
+				matchedUsers, err := FindUserDB(fUReq.Keyword)
+				if err != nil {
+					resp := ServerResponse{"response", "fail", request.RequestId, err.Error(), nil}
+					ws.WriteJSON(resp)
+					continue
+				}
+				users, err := json.Marshal(matchedUsers)
+				if err != nil {
+					ws.WriteJSON(ServerResponse{"response", "fail", request.RequestId, err.Error(), nil})
+					continue
+				}
+				resp := ServerResponse{"response", "success", request.RequestId, "", users}
+				ws.WriteJSON(resp)
 			case ActionCreateRoom:
 				var cRReq CreateRoomRequest
 
